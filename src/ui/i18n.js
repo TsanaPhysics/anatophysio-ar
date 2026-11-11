@@ -1,7 +1,7 @@
 // UI strings: th / en / both
 export const UI_TEXT = {
   th: {
-    title: "X-Ray Mirror",
+    title: "AnatoPhysio AR (กระจกกายวิภาคและสรีรวิทยา)",
     start_cam: "เปิดกล้อง (Start camera)",
     status_ready: "กดปุ่มเปิดกล้อง แล้วอนุญาตการเข้าถึงเว็บแคม",
     status_tracking: "กำลังตรวจจับและแสดงผลโครงสร้างกายวิภาค",
@@ -66,7 +66,7 @@ export const UI_TEXT = {
     ck_data: "แสดงข้อมูล Real-time Telemetry"
   },
   en: {
-    title: "X-Ray Mirror",
+    title: "AnatoPhysio AR (Medical Anatomy & Physiology Mirror)",
     start_cam: "Start camera",
     status_ready: "Click Start camera, then allow the camera.",
     status_tracking: "Tracking and rendering full anatomy.",
@@ -131,7 +131,7 @@ export const UI_TEXT = {
     ck_data: "Show telemetry data"
   },
   both: {
-    title: "X-Ray Mirror (กระจกเอกซเรย์)",
+    title: "AnatoPhysio AR (กระจกส่องตรวจกายวิภาคและสรีรวิทยา)",
     start_cam: "เปิดกล้อง (Start camera)",
     status_ready: "กด Start camera เพื่อเปิดกล้องเว็บแคม / Allow camera access",
     status_tracking: "Tracking anatomy / กำลังติดตามกายวิภาค",
