@@ -1,8 +1,9 @@
-import { THREE_URL, MP, MODELS, FACE_MODEL, HAND_MODEL } from "./config.js";
+import { THREE_URL, MP, MODELS, FACE_MODEL, HAND_MODEL, POSE_MODEL } from "./config.js";
+import { createBodyRig, updateBodyRig, segKey } from "./anatomy/body-rig.js";
 import { ANATOMY_DICT } from "./anatomy/dictionary.js";
 import { THORAX_LABELS } from "./anatomy/thorax-labels.js";
 import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeometry,
-         buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildFullSkeletonGeometry } from "./anatomy/procedural.js";
+         buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildSkeletonParts, buildFullSkeletonGeometry } from "./anatomy/procedural.js";
 import { UI_TEXT } from "./ui/i18n.js";
 import { VERT, FRAG } from "./shaders/xray.js";
 import { playSoftChime, playHeartSound } from "./audio/sounds.js";
@@ -84,6 +85,10 @@ function updateUILanguage() {
   setTxt("ui_ergo_roll", t.ergo_roll);
   setTxt("ui_ergo_yaw", t.ergo_yaw);
   setTxt("ui_ergo_jaw", t.ergo_jaw);
+  setTxt("ui_ergo_sh_tilt", t.ergo_sh_tilt);
+  setTxt("ui_ergo_body_yaw", t.ergo_body_yaw);
+  setTxt("ui_ergo_elbow", t.ergo_elbow);
+  setTxt("ui_ergo_knee", t.ergo_knee);
   setTxt("ui_cardiac_head", t.cardiac_head);
   setTxt("ui_lbl_bpm", t.lbl_bpm);
   setTxt("ui_lbl_resp", t.lbl_resp);
@@ -190,6 +195,8 @@ syncUI();
 // ------------------------------ 3D scene ------------------------------
 let THREE, renderer, headScene, handScene, cam, ortho, headGroup, jawPivot, baseProj;
 let heartGroup = null, lungsGroup = null, ribsGroup = null, skelGroup = null;
+let bodyGroup = null, bodyRig = null;
+const limbMeshes = {};
 let W = 640, H = 480;
 const meshes = {};
 const handRigs = [];
@@ -252,25 +259,35 @@ function buildScene() {
   add("cerebrum", geos.cerebrum, "brain", 0xff9fc0, 0xe2a39d, 5);
   add("hindbrain", geos.hindbrain, "brain", 0xffc37a, 0xd6ad84, 5);
 
-  // 1. Bony Thorax (Ribs 12 pairs + Sternum + Clavicles + Spine)
+  // Body group & Rig (Thorax, Viscera, Spine, Pelvis & Limbs)
+  bodyGroup = new THREE.Group(); bodyGroup.matrixAutoUpdate = false;
+  headScene.add(bodyGroup);
+  bodyRig = createBodyRig(THREE);
+
+  // 1. Bony Thorax (Ribs 12 pairs + Sternum + Clavicles + Thoracic Spine)
   const thoraxGeo = buildBonyThoraxGeometry();
-  ribsGroup = add("ribs", thoraxGeo, "ribs", 0xbfe3ff, 0xe9e2cf, 3);
+  ribsGroup = add("ribs", thoraxGeo, "ribs", 0xbfe3ff, 0xe9e2cf, 3, bodyGroup);
 
   // 2. Costal Cartilage (กระดูกอ่อนซี่โครง)
   const cartGeo = buildCostalCartilageGeometry();
-  add("cartilage", cartGeo, "cartilage", 0x88ddff, 0xd2e8f8, 3);
+  add("cartilage", cartGeo, "cartilage", 0x88ddff, 0xd2e8f8, 3, bodyGroup);
 
-  // 3. Bilateral Lungs (ปอดซ้าย-ขวา)
+  // 3. Bilateral Lungs (ปอดซ้าย-ขวา - correct anatomical situs)
   const lungsGeo = buildRealisticLungsGeometry();
-  lungsGroup = add("lungs", lungsGeo, "lungs", 0x55e0c5, 0xd99595, 2);
+  lungsGroup = add("lungs", lungsGeo, "lungs", 0x55e0c5, 0xd99595, 2, bodyGroup);
 
-  // 4. Realistic 4-Chamber Heart & Great Vessels
+  // 4. Realistic 4-Chamber Heart & Great Vessels (Apex & Aorta at subject's left)
   const heartGeo = buildRealisticHeartGeometry();
-  heartGroup = add("heart", heartGeo, "heart", 0xff3b5c, 0xb53545, 4);
+  heartGroup = add("heart", heartGeo, "heart", 0xff3b5c, 0xb53545, 4, bodyGroup);
 
-  // 5. Full Body Skeleton (Lumbar Spine, Pelvis, Humerus, Forearm, Femur, Tibia, Fibula, Feet)
-  const fullSkelGeo = buildFullSkeletonGeometry();
-  skelGroup = add("skeleton", fullSkelGeo, "skeleton", 0xbfe3ff, 0xe9e2cf, 3);
+  // 5. Full Body Skeleton: Axial (Lumbar spine & pelvis) + Articulated Limbs
+  const skelParts = buildSkeletonParts();
+  skelGroup = add("skeleton", skelParts.axial, "skeleton", 0xbfe3ff, 0xe9e2cf, 3, bodyGroup);
+  for (const k in skelParts.segments) {
+    const m = add("skeleton_" + k, skelParts.segments[k], "skeleton", 0xbfe3ff, 0xe9e2cf, 3, bodyGroup);
+    m.matrixAutoUpdate = false;
+    limbMeshes[k] = m;
+  }
 
   for (let h = 0; h < 2; h++) {
     const group = new THREE.Group(); group.visible = false; handScene.add(group);
@@ -466,10 +483,22 @@ function collectHeadLabels(lens) {
     if (solid && S.skull && L.layer === "brain") continue;
     let best = null;
     for (const p of L.pts) {
-      lp.fromArray(p); if (L.jaw) lp.applyMatrix4(jawM);
+      lp.fromArray(p);
+      const isThorax = L.layer === "ribs" || L.layer === "cartilage" || L.layer === "heart" || L.layer === "lungs" || L.layer === "skeleton";
+      let useM = M;
+      if (isThorax && bodyRig) {
+        if (L.seg) {
+          const side = p[0] >= 0 ? 1 : -1;
+          const k = segKey(L.seg, side);
+          if (bodyRig.seg[k]) lp.applyMatrix4(bodyRig.seg[k].matrix);
+        }
+        useM = bodyRig.matrix;
+      } else if (L.jaw) {
+        lp.applyMatrix4(jawM);
+      }
       if (clipState.on && clipState.x * lp.x + clipState.y * lp.y < clipState.w) continue;
-      ln.set(lp.x - HEAD_C[0], lp.y - HEAD_C[1], lp.z - HEAD_C[2]).transformDirection(M);
-      lp.applyMatrix4(M);
+      ln.set(lp.x - HEAD_C[0], lp.y - HEAD_C[1], lp.z - HEAD_C[2]).transformDirection(useM);
+      lp.applyMatrix4(useM);
       const facing = -(ln.x * lp.x + ln.y * lp.y + ln.z * lp.z) / (lp.length() || 1);
       if (solid && facing < 0.12) continue;
       const s = toScreen(lp);
@@ -564,6 +593,15 @@ function updateErgoUI(ergo) {
   $("ergo_roll").textContent = ergo.roll.toFixed(1) + "°";
   $("ergo_yaw").textContent = (ergo.yaw >= 0 ? "+" : "") + ergo.yaw.toFixed(1) + "°";
   $("ergo_jaw").textContent = ergo.jawMm + " mm";
+  if (bodyRig && bodyRig.info) {
+    const inf = bodyRig.info;
+    $("ergo_sh_tilt").textContent = (inf.shoulderTilt >= 0 ? "+" : "") + inf.shoulderTilt.toFixed(1) + "°";
+    $("ergo_body_yaw").textContent = (inf.torsoYaw >= 0 ? "+" : "") + inf.torsoYaw.toFixed(1) + "°";
+    $("ergo_elbow").textContent = (inf.elbowL !== null ? inf.elbowL.toFixed(0) + "°" : "-") + " / " +
+                                  (inf.elbowR !== null ? inf.elbowR.toFixed(0) + "°" : "-");
+    $("ergo_knee").textContent  = (inf.kneeL !== null ? inf.kneeL.toFixed(0) + "°" : "-") + " / " +
+                                  (inf.kneeR !== null ? inf.kneeR.toFixed(0) + "°" : "-");
+  }
 
   const pct = Math.min(100, Math.max(10, (ergo.loadKg / 28) * 100));
   const bar = $("ergo_bar");
@@ -616,7 +654,7 @@ let pointer = null, frames = 0, fps = 0, fpsAt = 0, dataAt = 0;
 stage.addEventListener("pointermove", e => { const r = stage.getBoundingClientRect(); pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; });
 stage.addEventListener("pointerleave", () => { pointer = null; });
 
-function renderFrame(now, faceLms, hands, sides) {
+function renderFrame(now, faceLms, hands, sides, poseData) {
   const sg = $("shade").getContext("2d"); sg.clearRect(0, 0, W, H);
   handRigs.forEach((rig, i) => {
     const lms = hands[i];
@@ -627,7 +665,24 @@ function renderFrame(now, faceLms, hands, sides) {
                                                  m.material.uniforms.uFeather.value = S.feather * 0.75; }
     } else rig.group.visible = false;
   });
-  if (!head.found) headGroup.visible = false;
+  if (!head.found) {
+    headGroup.visible = false;
+    if (bodyGroup) bodyGroup.visible = false;
+  } else {
+    if (bodyGroup) {
+      bodyGroup.visible = true;
+      const headScale = S.fs * S.fw;
+      updateBodyRig(bodyRig, poseData, headGroup.matrix, headScale, cam, now);
+      bodyGroup.matrix.copy(bodyRig.matrix);
+      bodyGroup.matrixWorldNeedsUpdate = true;
+      for (const k in limbMeshes) {
+        if (bodyRig.seg[k]) {
+          limbMeshes[k].matrix.copy(bodyRig.seg[k].matrix);
+          limbMeshes[k].matrixWorldNeedsUpdate = true;
+        }
+      }
+    }
+  }
   applyLayers();
 
   // 1. Helical Cardiac Contraction & Apex Twist Animation
@@ -735,7 +790,7 @@ function renderFrame(now, faceLms, hands, sides) {
 }
 
 // ------------------------------ start-up ------------------------------
-let faceTracker = null, handTracker = null;
+let faceTracker = null, handTracker = null, poseTracker = null;
 async function loadTrackers() {
   const vision = await import(MP + "/vision_bundle.mjs");
   const files = await vision.FilesetResolver.forVisionTasks(MP + "/wasm");
@@ -743,9 +798,13 @@ async function loadTrackers() {
     runningMode: "VIDEO", numFaces: 1, outputFacialTransformationMatrixes: true, outputFaceBlendshapes: true });
   const mkHand = d => vision.HandLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: HAND_MODEL, delegate: d },
     runningMode: "VIDEO", numHands: 2 });
+  const mkPose = d => vision.PoseLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: POSE_MODEL, delegate: d },
+    runningMode: "VIDEO", numPoses: 1, outputSegmentationMasks: false });
   try { faceTracker = await mkFace("GPU"); } catch (e) { faceTracker = await mkFace("CPU"); }
   try { try { handTracker = await mkHand("GPU"); } catch (e) { handTracker = await mkHand("CPU"); } }
   catch (e) { handTracker = null; }
+  try { try { poseTracker = await mkPose("GPU"); } catch (e) { poseTracker = await mkPose("CPU"); } }
+  catch (e) { poseTracker = null; console.warn("Pose tracker unavailable:", e); }
 }
 
 function liveLoop() {
@@ -756,7 +815,7 @@ function liveLoop() {
     if (video.readyState < 2 || video.currentTime === lastTime) return;
     lastTime = video.currentTime;
     const now = performance.now();
-    let faceLms = null, hands = [], sides = [];
+    let faceLms = null, hands = [], sides = [], poseData = null;
     try {
       const fr = faceTracker.detectForVideo(video, now);
       faceLms = fr.faceLandmarks && fr.faceLandmarks[0];
@@ -773,12 +832,19 @@ function liveLoop() {
         const hd = hr.handedness || hr.handednesses || [];
         sides = hands.map((h, i) => !!(hd[i] && hd[i][0] && hd[i][0].categoryName === "Left"));
       }
+      if (poseTracker && (S.skeleton || S.ribs || S.heart || S.lungs || S.ergo)) {
+        const pr = poseTracker.detectForVideo(video, now);
+        if (pr && pr.landmarks && pr.landmarks[0]) {
+          poseData = { image: pr.landmarks[0], world: pr.worldLandmarks && pr.worldLandmarks[0] };
+        }
+      }
     } catch (e) { say("The tracker hit an error: " + e.message, "bad"); return; }
     const t = UI_TEXT[S.lang] || UI_TEXT.both;
-    say(head.found ? t.status_tracking + (hands.length ? t.status_hands : "")
-                   : hands.length ? "Hand found. Face the camera to see inside your head."
+    const bodyStr = poseData ? " + Body" : "";
+    say(head.found ? t.status_tracking + (hands.length ? t.status_hands : "") + bodyStr
+                   : hands.length ? "Hand found. Face the camera to see inside your body."
                    : "No face found. Face the camera, with light on your face.", head.found || hands.length ? "ok" : "bad");
-    renderFrame(now, faceLms, hands, sides);
+    renderFrame(now, faceLms, hands, sides, poseData);
   }
   tick();
 }
@@ -798,7 +864,7 @@ function demoLoop() {
     for (const id of FIT_IDS) { const v = new THREE.Vector3().fromArray(META.fit[id]).applyMatrix4(m).applyMatrix4(baseProj); lms[id] = { x: (v.x + 1) / 2, y: (1 - v.y) / 2, z: 0 }; }
     updateHead(m.elements, lms, 0.5 + 0.5 * Math.sin(time * 1.3));
     const k = 0.0021 * H / W * (4 / 3), hand = base.map(p => ({ x: 0.2 - (p[0] - cx) * k, y: 0.56 + (p[2] - cz) * k * W / H, z: (p[1] - cy) * k }));
-    renderFrame(now, FIT_IDS.map(id => lms[id]), [hand], [true]);
+    renderFrame(now, FIT_IDS.map(id => lms[id]), [hand], [true], null);
   }
   tick();
 }

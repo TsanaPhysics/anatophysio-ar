@@ -3,6 +3,15 @@
 let THREE;
 export function setThree(t) { THREE = t; }
 
+// Mirror a geometry across the sagittal plane (x -> -x) and restore triangle winding.
+export function mirrorX(geo) {
+  geo.scale(-1, 1, 1);
+  const idx = geo.index;
+  if (idx) for (let i = 0; i < idx.count; i += 3) { const t = idx.getX(i + 1); idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, t); }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 export function mergeGeos(list) {
   let totalPos = 0, totalNorm = 0, totalIdx = 0;
   for (const g of list) {
@@ -165,7 +174,8 @@ export function buildRealisticHeartGeometry() {
   ]), 10, 0.16, 6, false);
   geos.push(rca);
 
-  return mergeGeos(geos);
+  // Authored with the apex/aorta at -x; model +x is the subject's LEFT, so mirror to levocardia.
+  return mirrorX(mergeGeos(geos));
 }
 
 export function buildRealisticLungsGeometry() {
@@ -178,12 +188,15 @@ export function buildRealisticLungsGeometry() {
   const lInferior = new THREE.SphereGeometry(3.6, 12, 10); lInferior.scale(0.82, 1.2, 0.82); lInferior.translate(-5.5, -23.8, -1.0); geos.push(lInferior);
   const lingula = new THREE.SphereGeometry(2.0, 10, 8); lingula.scale(0.6, 1.1, 0.6); lingula.translate(-4.2, -22.2, 0.4); geos.push(lingula);
 
-  return mergeGeos(geos);
+  // Authored with the 3-lobed right lung at +x; mirror so it lies on the subject's RIGHT (-x).
+  return mirrorX(mergeGeos(geos));
 }
 
 // ------------------------------ Full Skeleton (Limbs & Pelvis) ------------------------------
-export function buildFullSkeletonGeometry() {
-  const geos = [];
+export function buildSkeletonParts() {
+  const geos = [];  // axial: lumbar spine, sacrum, pelvis
+  const parts = {};
+  const put = (name, side, g) => { const k = name + (side > 0 ? "L" : "R"); (parts[k] || (parts[k] = [])).push(g); };
 
   // Lumbar Spine (L1-L5)
   for (let i = 0; i < 5; i++) {
@@ -224,7 +237,7 @@ export function buildFullSkeletonGeometry() {
   for (const side of [-1, 1]) {
     const shBall = new THREE.SphereGeometry(1.4, 10, 8);
     shBall.translate(side * 15.8, -14.6, 0.4);
-    geos.push(shBall);
+    put("upperArm", side, shBall);
 
     const humCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 15.8, -14.6, 0.4),
@@ -232,11 +245,11 @@ export function buildFullSkeletonGeometry() {
       new THREE.Vector3(side * 17.5, -28.5, -0.6)
     ]);
     const humTube = new THREE.TubeGeometry(humCurve, 12, 0.85, 8, false);
-    geos.push(humTube);
+    put("upperArm", side, humTube);
 
     const elbow = new THREE.SphereGeometry(1.2, 8, 8);
     elbow.translate(side * 17.5, -28.5, -0.6);
-    geos.push(elbow);
+    put("forearm", side, elbow);
 
     const radCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 17.8, -29.2, -0.4),
@@ -244,7 +257,7 @@ export function buildFullSkeletonGeometry() {
       new THREE.Vector3(side * 19.2, -42.0, 0.5)
     ]);
     const radTube = new THREE.TubeGeometry(radCurve, 10, 0.48, 6, false);
-    geos.push(radTube);
+    put("forearm", side, radTube);
 
     const ulnaCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 17.2, -29.2, -0.8),
@@ -252,14 +265,14 @@ export function buildFullSkeletonGeometry() {
       new THREE.Vector3(side * 18.4, -42.0, 0.1)
     ]);
     const ulnaTube = new THREE.TubeGeometry(ulnaCurve, 10, 0.44, 6, false);
-    geos.push(ulnaTube);
+    put("forearm", side, ulnaTube);
   }
 
   // Lower Limbs (Femur, Patella, Tibia, Fibula, Feet)
   for (const side of [-1, 1]) {
     const femHead = new THREE.SphereGeometry(1.6, 10, 8);
     femHead.translate(side * 8.2, -46.5, -0.4);
-    geos.push(femHead);
+    put("thigh", side, femHead);
 
     const femCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 8.2, -46.5, -0.4),
@@ -268,15 +281,15 @@ export function buildFullSkeletonGeometry() {
       new THREE.Vector3(side * 6.8, -67.0, 0.2)
     ]);
     const femTube = new THREE.TubeGeometry(femCurve, 16, 1.15, 8, false);
-    geos.push(femTube);
+    put("thigh", side, femTube);
 
     const patella = new THREE.CylinderGeometry(0.9, 0.7, 0.5, 8);
     patella.rotateX(Math.PI / 2); patella.translate(side * 6.8, -67.0, 1.8);
-    geos.push(patella);
+    put("shin", side, patella);
 
     const knee = new THREE.SphereGeometry(1.6, 10, 8);
     knee.scale(1.1, 0.8, 1.0); knee.translate(side * 6.8, -67.5, 0.2);
-    geos.push(knee);
+    put("shin", side, knee);
 
     const tibCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 6.8, -68.5, 0.2),
@@ -284,7 +297,7 @@ export function buildFullSkeletonGeometry() {
       new THREE.Vector3(side * 6.2, -88.0, -0.2)
     ]);
     const tibTube = new THREE.TubeGeometry(tibCurve, 14, 0.95, 8, false);
-    geos.push(tibTube);
+    put("shin", side, tibTube);
 
     const fibCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 8.2, -69.5, -0.4),
@@ -292,11 +305,11 @@ export function buildFullSkeletonGeometry() {
       new THREE.Vector3(side * 7.5, -87.5, -0.3)
     ]);
     const fibTube = new THREE.TubeGeometry(fibCurve, 12, 0.38, 6, false);
-    geos.push(fibTube);
+    put("shin", side, fibTube);
 
     const ankle = new THREE.SphereGeometry(1.2, 8, 8);
     ankle.translate(side * 6.2, -88.0, -0.2);
-    geos.push(ankle);
+    put("shin", side, ankle);
 
     const footCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(side * 6.2, -88.0, -0.2),
@@ -305,8 +318,16 @@ export function buildFullSkeletonGeometry() {
       new THREE.Vector3(side * 5.8, -91.0, 8.5)
     ]);
     const footTube = new THREE.TubeGeometry(footCurve, 10, 0.82, 6, false);
-    geos.push(footTube);
+    put("shin", side, footTube);
   }
 
-  return mergeGeos(geos);
+  const out = { axial: mergeGeos(geos), segments: {} };
+  for (const k in parts) out.segments[k] = mergeGeos(parts[k]);
+  return out;
+}
+
+// Whole skeleton as a single mesh (rest pose) - kept for compatibility.
+export function buildFullSkeletonGeometry() {
+  const { axial, segments } = buildSkeletonParts();
+  return mergeGeos([axial, ...Object.values(segments)]);
 }

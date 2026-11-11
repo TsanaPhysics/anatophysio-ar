@@ -4,3 +4,4 @@ export const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
 export const MODELS = "https://storage.googleapis.com/mediapipe-models/";
 export const FACE_MODEL = MODELS + "face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 export const HAND_MODEL = MODELS + "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+export const POSE_MODEL = MODELS + "pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
