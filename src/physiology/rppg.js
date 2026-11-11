@@ -152,3 +152,4 @@ export class RPPGDetector {
     this.confidence = Math.max(0.1, this.confidence - 0.05);
   }
 }
+

@@ -102,3 +102,4 @@ export function evaluateTMJ(jawScore, headScale = 1.0) {
     text
   };
 }
+

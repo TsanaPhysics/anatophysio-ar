@@ -11,6 +11,7 @@ import { RPPGDetector } from "./physiology/rppg.js";
 import { WiggersCycle } from "./physiology/wiggers.js";
 import { evaluateCobbAngle, evaluateCROM, evaluateTMJ } from "./physiology/clinical.js";
 import { computeErgonomics } from "./physiology/ergonomics.js";
+import { initInspector, showAnatomyInspector, hideAnatomyInspector } from "./ui/inspector.js";
 
 const $ = id => document.getElementById(id);
 const statusEl = $("status"), video = $("video"), stage = $("stage");
@@ -80,6 +81,7 @@ function updateUILanguage() {
   setTxt("ui_ck_eyes", t.ck_eyes);
   setTxt("ui_ck_outline", t.ck_outline);
   setTxt("ui_ck_labels", t.ck_labels);
+  setTxt("ui_inspector_lbl", t.inspector_lbl);
   setTxt("ui_ergo_head", t.ergo_head);
   setTxt("ui_ergo_on", t.ergo_on);
   setTxt("ui_ergo_sound", t.ergo_sound);
@@ -163,6 +165,7 @@ function syncUI() {
   $("cutrow").hidden = S.reveal === "whole";
   $("cutlabel").textContent = S.reveal === "lens" ? (S.lang === "th" ? "ขนาดเลนส์ไฟฉาย" : "Lens size") : (S.lang === "th" ? "ตำแหน่งระนาบตัด" : "Cut position");
   updateUILanguage();
+  populateAnatomySelect();
 }
 for (const k of LAYERS) { const el = $("L_" + k); if (el) el.onchange = e => { S[k] = e.target.checked; save(); }; }
 for (const b of $("style").children) b.onclick = () => { S.style = b.dataset.style; save(); syncUI(); applyStyle(); };
@@ -1014,10 +1017,35 @@ function demoLoop() {
   tick();
 }
 
+
+function populateAnatomySelect() {
+  const sel = $("anatomy_select");
+  if (!sel) return;
+  const curVal = sel.value;
+  sel.innerHTML = '<option value="">-- ' + (S.lang === "th" ? "เลือกอวัยวะเพื่อดูข้อมูล FMA / Clinical" : "Select organ for FMA / Clinical Data") + ' --</option>';
+  for (const k in ANATOMY_DICT) {
+    const item = ANATOMY_DICT[k];
+    const opt = document.createElement("option");
+    opt.value = k;
+    const txt = S.lang === "th" ? item.th : S.lang === "en" ? item.en : (item.th + " (" + item.en + ")");
+    opt.textContent = "[" + (item.fma || "FMA") + "] " + txt;
+    if (k === curVal) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 async function boot() {
   THREE = await import(DEMO && new URLSearchParams(location.search).get("three") || THREE_URL);
   setThree(THREE);
   initMath(); initHandMath(); buildScene();
+  initInspector(stage);
+  populateAnatomySelect();
+  if ($("anatomy_select")) {
+    $("anatomy_select").onchange = (e) => {
+      if (e.target.value) showAnatomyInspector(e.target.value, S.lang);
+      else hideAnatomyInspector();
+    };
+  }
 }
 
 $("start").onclick = async () => {
