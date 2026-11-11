@@ -15,7 +15,17 @@
 x-ray/
 ├── index.html                      # HTML markup (~13 KB)
 ├── css/app.css                     # สไตล์ทั้งหมด
-├── src/main.js                     # ES module หลัก (render, tracking, physiology, UI)
+├── src/
+│   ├── main.js                     # state, scene, tracking loop, HUD, boot (843 บรรทัด)
+│   ├── config.js                   # URL ของ Three.js / MediaPipe / models
+│   ├── anatomy/
+│   │   ├── dictionary.js           # ศัพท์กายวิภาค TH/EN (52 คำ)
+│   │   ├── thorax-labels.js        # จุดยึดป้ายชื่อทรวงอก/โครงกระดูก
+│   │   └── procedural.js           # สร้าง geometry ซี่โครง หัวใจ ปอด โครงกระดูก (setThree ก่อนใช้)
+│   ├── physiology/ergonomics.js    # โมเดลภาระกระดูกคอ C1–C7 และระยะอ้าปาก TMJ
+│   ├── audio/sounds.js             # เสียงเตือนท่าทาง + เสียงหัวใจ S1/S2
+│   ├── shaders/xray.js             # GLSL vertex/fragment (X-ray / solid / clip)
+│   └── ui/i18n.js                  # ข้อความ UI th / en / both
 ├── assets/models/
 │   ├── anatomy.meta.json           # ป้ายกำกับกายวิภาค, ข้อมูล mesh offsets, fit points
 │   └── anatomy.mesh.bin            # vertex (uint16 quantized) + index buffer รวม 23 mesh
@@ -31,7 +41,7 @@ x-ray/
 
 ## แผนพัฒนาต่อ
 - Phase 1 ✅ แยก CSS / JS / binary assets ออกจาก HTML
-- Phase 1b แยก `src/main.js` เป็นโมดูลย่อย (shaders, tracking, anatomy, physiology, ui)
+- Phase 1b ✅ (ขั้นแรก) แยกส่วนที่ไม่ผูก state ออกเป็นโมดูล; ส่วน state/scene/tracking ยังอยู่ใน `main.js`
 - Phase 2 Full-body PoseLandmarker + skeletal IK
 - Phase 3 rPPG วัดชีพจรจริง, Wiggers cardiac cycle, เครื่องมือวัด CROM / TMJ
 - Phase 4 พจนานุกรม FMA/SNOMED CT และคู่มือวิชาการ
