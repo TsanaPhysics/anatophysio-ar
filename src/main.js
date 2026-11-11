@@ -6,7 +6,10 @@ import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeome
          buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildSkeletonParts, buildFullSkeletonGeometry } from "./anatomy/procedural.js";
 import { UI_TEXT } from "./ui/i18n.js";
 import { VERT, FRAG } from "./shaders/xray.js";
-import { playSoftChime, playHeartSound } from "./audio/sounds.js";
+import { playSoftChime, playHeartSound, playS1, playS2 } from "./audio/sounds.js";
+import { RPPGDetector } from "./physiology/rppg.js";
+import { WiggersCycle } from "./physiology/wiggers.js";
+import { evaluateCobbAngle, evaluateCROM, evaluateTMJ } from "./physiology/clinical.js";
 import { computeErgonomics } from "./physiology/ergonomics.js";
 
 const $ = id => document.getElementById(id);
@@ -94,6 +97,10 @@ function updateUILanguage() {
   setTxt("ui_lbl_resp", t.lbl_resp);
   setTxt("ui_ck_sound", t.ck_sound);
   setTxt("ui_ck_twist", t.ck_twist);
+  setTxt("ui_ck_rppg", t.ck_rppg);
+  setTxt("ui_ck_ecg", t.ck_ecg);
+  setTxt("ui_ergo_cobb_lbl", t.ergo_cobb_lbl);
+  setTxt("ui_ergo_crom_lbl", t.ergo_crom_lbl);
   setTxt("ui_mr_head", t.mr_head);
   setTxt("ui_lbl_bright", t.lbl_bright);
   setTxt("ui_lbl_real", t.lbl_real);
@@ -122,7 +129,7 @@ function updateUILanguage() {
 const DEFAULTS = {
   skull: true, brain: false, muscles: false, eyes: true, outline: true, hands: true,
   ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true,
-  bpm: 75, resp: 15, heartAudio: true, twist: true,
+  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
   fs: 1, fw: 1, fh: 1, fd: 1, fx: 0, fy: 0, fz: 0, labels: false,
   lang: "both", ergo: true, ergoAudio: true
@@ -140,6 +147,8 @@ function syncUI() {
   for (const b of $("lang_seg").children) b.classList.toggle("on", b.dataset.lang === S.lang);
   $("ergo_enable").checked = S.ergo;
   $("ergo_audio").checked = S.ergoAudio;
+  if ($("rppg_enable")) $("rppg_enable").checked = S.rppg;
+  if ($("ecg_hud")) $("ecg_hud").checked = S.ecgHud;
   if ($("heart_sound")) $("heart_sound").checked = S.heartAudio;
   if ($("helical_twist")) $("helical_twist").checked = S.twist;
   for (const k of SLIDERS) { const el = $(k); if (el) el.value = S[k]; }
@@ -160,6 +169,8 @@ for (const b of $("style").children) b.onclick = () => { S.style = b.dataset.sty
 for (const b of $("lang_seg").children) b.onclick = () => { S.lang = b.dataset.lang; save(); syncUI(); };
 $("ergo_enable").onchange = e => { S.ergo = e.target.checked; save(); };
 $("ergo_audio").onchange = e => { S.ergoAudio = e.target.checked; save(); };
+if ($("rppg_enable")) $("rppg_enable").onchange = e => { S.rppg = e.target.checked; save(); };
+if ($("ecg_hud")) $("ecg_hud").onchange = e => { S.ecgHud = e.target.checked; save(); };
 if ($("heart_sound")) $("heart_sound").onchange = e => { S.heartAudio = e.target.checked; save(); };
 if ($("helical_twist")) $("helical_twist").onchange = e => { S.twist = e.target.checked; save(); };
 for (const k of SLIDERS) { const el = $(k); if (el) el.oninput = e => { S[k] = parseFloat(e.target.value); save(); syncUI(); }; }
@@ -197,6 +208,10 @@ let THREE, renderer, headScene, handScene, cam, ortho, headGroup, jawPivot, base
 let heartGroup = null, lungsGroup = null, ribsGroup = null, skelGroup = null;
 let bodyGroup = null, bodyRig = null;
 const limbMeshes = {};
+const rppgDetector = new RPPGDetector(6);
+const wiggersCycle = new WiggersCycle();
+const ecgHistory = [];
+let lastEcgPush = 0;
 let W = 640, H = 480;
 const meshes = {};
 const handRigs = [];
@@ -603,6 +618,23 @@ function updateErgoUI(ergo) {
                                   (inf.kneeR !== null ? inf.kneeR.toFixed(0) + "°" : "-");
   }
 
+  // Clinical Cobb Angle & CROM
+  if (head && head.quat) {
+    const eu = new THREE.Euler().setFromQuaternion(head.quat, "YXZ");
+    const crom = evaluateCROM(eu);
+    if ($("ergo_crom")) {
+      const dir = crom.isFlexion ? "ก้ม" : "เงย";
+      $("ergo_crom").textContent = dir + " " + Math.round(Math.abs(crom.pitchDeg)) + "° (" + crom.sagittalPct + "% ROM)";
+    }
+  }
+  if (lastPoseData && lastPoseData.image) {
+    const cobb = evaluateCobbAngle(lastPoseData.image);
+    if ($("ergo_cobb")) {
+      $("ergo_cobb").textContent = cobb.angle.toFixed(1) + "° (" + (cobb.status === "normal" ? "ปกติ" : "เอน") + ")";
+      $("ergo_cobb").style.color = cobb.status === "normal" ? "var(--ok)" : cobb.status === "mild" ? "var(--warn)" : "var(--bad)";
+    }
+  }
+
   const pct = Math.min(100, Math.max(10, (ergo.loadKg / 28) * 100));
   const bar = $("ergo_bar");
   bar.style.width = pct + "%";
@@ -649,12 +681,85 @@ function drawErgoHUD(g, ergo) {
   g.restore();
 }
 
+
+function drawECGHUD(g, wState, rppgRes) {
+  if (!S.ecgHud) return;
+  const boxW = Math.min(270, W * 0.44), boxH = 76;
+  const bx = W - boxW - 14, by = H - boxH - 16;
+
+  g.save();
+  // Glassmorphic monitor background
+  g.fillStyle = "rgba(7, 11, 20, 0.85)";
+  g.strokeStyle = "rgba(71, 217, 132, 0.4)";
+  g.lineWidth = 1.2;
+  const r = 8;
+  g.beginPath();
+  g.moveTo(bx + r, by); g.lineTo(bx + boxW - r, by); g.quadraticCurveTo(bx + boxW, by, bx + boxW, by + r);
+  g.lineTo(bx + boxW, by + boxH - r); g.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - r, by + boxH);
+  g.lineTo(bx + r, by + boxH); g.quadraticCurveTo(bx, by + boxH, bx, by + boxH - r);
+  g.lineTo(bx, by + r); g.quadraticCurveTo(bx, by, bx + r, by);
+  g.closePath();
+  g.fill(); g.stroke();
+
+  // Grid lines
+  g.strokeStyle = "rgba(71, 217, 132, 0.12)";
+  g.lineWidth = 0.8;
+  for (let y = by + 12; y < by + boxH; y += 14) {
+    g.beginPath(); g.moveTo(bx + 6, y); g.lineTo(bx + boxW - 6, y); g.stroke();
+  }
+  for (let x = bx + 12; x < bx + boxW; x += 22) {
+    g.beginPath(); g.moveTo(x, by + 18); g.lineTo(x, by + boxH - 6); g.stroke();
+  }
+
+  // Header
+  g.font = "700 10.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#47d984";
+  g.textAlign = "left"; g.textBaseline = "top";
+  g.fillText("LEAD II ECG  |  " + Math.round(S.bpm) + " BPM", bx + 10, by + 6);
+
+  // Pulse Lock Indicator
+  const isLock = rppgRes && rppgRes.confidence > 0.45;
+  g.textAlign = "right";
+  g.fillStyle = isLock ? "#47d984" : S.rppg ? "#ffb703" : "#8a96b5";
+  g.fillText(isLock ? "● rPPG LOCK" : S.rppg ? "▲ SCANNING" : "○ MANUAL", bx + boxW - 8, by + 6);
+
+  // ECG Trace
+  if (ecgHistory.length > 2) {
+    g.strokeStyle = "#47d984";
+    g.lineWidth = 1.8;
+    g.shadowColor = "rgba(71, 217, 132, 0.75)";
+    g.shadowBlur = 4;
+    g.beginPath();
+    const baselineY = by + 46;
+    const stepX = (boxW - 20) / 190;
+    const startIdx = Math.max(0, ecgHistory.length - 190);
+
+    for (let i = startIdx; i < ecgHistory.length; i++) {
+      const x = bx + 10 + (i - startIdx) * stepX;
+      const y = baselineY - (ecgHistory[i] * 22);
+      if (i === startIdx) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.stroke();
+    g.shadowBlur = 0;
+  }
+
+  // Phase Footer
+  g.font = "500 9.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "rgba(238, 242, 250, 0.65)";
+  g.textAlign = "left";
+  g.fillText(wState.phaseName, bx + 10, by + boxH - 14);
+
+  g.restore();
+}
+
 // ------------------------------ per-frame update ------------------------------
 let pointer = null, frames = 0, fps = 0, fpsAt = 0, dataAt = 0;
 stage.addEventListener("pointermove", e => { const r = stage.getBoundingClientRect(); pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; });
 stage.addEventListener("pointerleave", () => { pointer = null; });
 
-function renderFrame(now, faceLms, hands, sides, poseData) {
+let lastPoseData = null;
+function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
+  if (poseData) lastPoseData = poseData;
   const sg = $("shade").getContext("2d"); sg.clearRect(0, 0, W, H);
   handRigs.forEach((rig, i) => {
     const lms = hands[i];
@@ -685,24 +790,38 @@ function renderFrame(now, faceLms, hands, sides, poseData) {
   }
   applyLayers();
 
-  // 1. Helical Cardiac Contraction & Apex Twist Animation
-  if (meshes.heart && S.heart) {
-    const bpm = S.bpm || 75;
-    const freq = (bpm / 60) * Math.PI * 2;
-    const phase = (now / 1000) * freq;
-    const lub = Math.sin(phase);
-    const dub = Math.sin(phase + 0.65);
-    const beat = Math.pow(Math.max(0, lub), 6) * 0.16 + Math.pow(Math.max(0, dub), 8) * 0.10;
+  // 1. Physiological Wiggers Cardiac Cycle & Helical Apex Twist
+  const wState = wiggersCycle.evaluate(now, S.bpm || 75);
+  if ($("wiggers_phase_lbl")) {
+    $("wiggers_phase_lbl").textContent = "Wiggers Phase: " + wState.phaseName;
+  }
 
-    const twistAngle = S.twist ? (beat * 0.22) : 0;
+  // Push to ECG history buffer @ ~60 fps
+  if (now - lastEcgPush > 16) {
+    lastEcgPush = now;
+    ecgHistory.push(wState.ecg);
+    if (ecgHistory.length > 200) ecgHistory.shift();
+  }
+
+  if (meshes.heart && S.heart) {
+    const vol = wState.ventricleVolume; // 1.0 (EDV) down to 0.4 (ESV)
+    const twistAngle = S.twist ? wState.twist : 0;
+
+    // Ventricles contract and apex twists counterclockwise
+    const sX = 0.75 + 0.25 * vol;
+    const sY = 0.70 + 0.30 * vol;
+    const sZ = 0.75 + 0.25 * vol;
+    meshes.heart.mesh.scale.set(sX, sY, sZ);
     meshes.heart.mesh.rotation.z = twistAngle;
-    meshes.heart.mesh.rotation.y = twistAngle * 0.6;
-    meshes.heart.mesh.scale.set(1 + beat * 0.8, 1 + beat * 1.15, 1 + beat * 0.8);
+    meshes.heart.mesh.rotation.y = twistAngle * 0.55;
 
     const u = meshes.heart.mesh.material.uniforms;
-    u.uGain.value = (S.style === "solid" ? 1.0 : S.bright * 1.25) * (1.0 + beat * 0.85);
+    const ejectionGlow = (1.0 - (vol - 0.4) / 0.6) * 0.5;
+    u.uGain.value = (S.style === "solid" ? 1.0 : S.bright * 1.25) * (1.0 + ejectionGlow);
 
-    if (beat > 0.18) playHeartSound(now, S.heartAudio, S.bpm);
+    // Acoustically accurate S1 ("Lub" - AV valves snap shut) & S2 ("Dub" - Semilunar valves close)
+    if (wState.triggerS1) playS1(S.heartAudio);
+    if (wState.triggerS2) playS2(S.heartAudio);
   }
 
   // 2. Respiratory Cycle (Lungs & Thoracic expansion)
@@ -739,6 +858,7 @@ function renderFrame(now, faceLms, hands, sides, poseData) {
   const g = $("hud").getContext("2d"); g.clearRect(0, 0, W, H);
   if (lens) { g.strokeStyle = "rgba(127,209,255,.8)"; g.lineWidth = 2; g.beginPath(); g.arc(lens.x, lens.y, lens.r, 0, 6.3); g.stroke(); }
   if (S.labels) drawLabels(g, lens);
+  drawECGHUD(g, wState, rppgLatest);
 
   // Ergonomics computation & HUD overlay
   if (head.found && headGroup.visible) {
@@ -815,7 +935,7 @@ function liveLoop() {
     if (video.readyState < 2 || video.currentTime === lastTime) return;
     lastTime = video.currentTime;
     const now = performance.now();
-    let faceLms = null, hands = [], sides = [], poseData = null;
+    let faceLms = null, hands = [], sides = [], poseData = null, rppgLatest = null;
     try {
       const fr = faceTracker.detectForVideo(video, now);
       faceLms = fr.faceLandmarks && fr.faceLandmarks[0];
@@ -825,6 +945,31 @@ function liveLoop() {
         const bs = fr.faceBlendshapes && fr.faceBlendshapes[0];
         if (bs) for (const c of bs.categories) if (c.categoryName === "jawOpen") jaw = c.score;
         updateHead(mat.data, faceLms, jaw); lostAt = 0;
+
+        // Remote Photoplethysmography (rPPG) from forehead skin color micro-pulsations
+        if (S.rppg) {
+          rppgLatest = rppgDetector.processFrame(video, faceLms, now);
+          if (rppgLatest.confidence > 0.45) {
+            S.bpm = Math.round(rppgLatest.bpm);
+            if ($("bpm")) $("bpm").value = S.bpm;
+            if ($("bpmv")) $("bpmv").textContent = S.bpm + " BPM";
+            if ($("ui_bpm_live")) $("ui_bpm_live").textContent = "❤️ " + S.bpm + " BPM";
+            if ($("rppg_status_badge")) {
+              $("rppg_status_badge").textContent = "🟢 rPPG ชีพจรล็อกแล้ว (Face Pulse Lock: " + S.bpm + " BPM)";
+              $("rppg_status_badge").style.color = "var(--ok)";
+            }
+          } else {
+            if ($("rppg_status_badge")) {
+              $("rppg_status_badge").textContent = "🟡 rPPG กำลังสแกนสีผิวหน้าผาก (Calibrating...)";
+              $("rppg_status_badge").style.color = "var(--warn)";
+            }
+          }
+        } else {
+          if ($("rppg_status_badge")) {
+            $("rppg_status_badge").textContent = "⚪ ใช้ค่าจำลองจากแถบเลื่อน (Manual Slider)";
+            $("rppg_status_badge").style.color = "var(--dim)";
+          }
+        }
       } else { faceLms = null; if (!lostAt) lostAt = now; if (now - lostAt > 250) head.found = false; }
       if (handTracker && (S.hands || S.reveal === "lens" || S.showdata)) {
         const hr = handTracker.detectForVideo(video, now);
@@ -844,7 +989,7 @@ function liveLoop() {
     say(head.found ? t.status_tracking + (hands.length ? t.status_hands : "") + bodyStr
                    : hands.length ? "Hand found. Face the camera to see inside your body."
                    : "No face found. Face the camera, with light on your face.", head.found || hands.length ? "ok" : "bad");
-    renderFrame(now, faceLms, hands, sides, poseData);
+    renderFrame(now, faceLms, hands, sides, poseData, rppgLatest);
   }
   tick();
 }

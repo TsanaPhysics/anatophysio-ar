@@ -109,9 +109,15 @@
             <label for="resp" id="ui_lbl_resp">อัตราการหายใจ <b id="respv">15 /min</b></label>
             <input id="resp" type="range" min="8" max="30" step="1" value="15">
           </div>
-          <div class="grid-2" style="margin-top:12px; padding-top:9px; border-top:1px solid var(--line)">
+          <div class="checks" style="margin-top:10px; padding-top:9px; border-top:1px solid var(--line)">
+            <label class="ck" style="font-weight:600"><input type="checkbox" id="rppg_enable" checked><span id="ui_ck_rppg">วัดชีพจรจริงผ่านกล้อง (Camera rPPG)</span></label>
+            <div id="rppg_status_badge" style="font-size:11px; margin-top:4px; color:var(--ok); font-weight:600">🟢 rPPG พร้อมทำงาน (Face Pulse Detector)</div>
+            <div style="font-size:11px; color:var(--dim); margin-top:3px" id="wiggers_phase_lbl">Wiggers Cycle: Diastasis</div>
+          </div>
+          <div class="grid-2" style="margin-top:10px; padding-top:8px; border-top:1px solid var(--line)">
             <label class="ck"><input type="checkbox" id="heart_sound" checked><span id="ui_ck_sound">เสียงเต้น Lub-Dub</span></label>
             <label class="ck"><input type="checkbox" id="helical_twist" checked><span id="ui_ck_twist">บิดเกลียว Apex Twist</span></label>
+            <label class="ck"><input type="checkbox" id="ecg_hud" checked><span id="ui_ck_ecg">คลื่นหัวใจ Lead II (ECG HUD)</span></label>
           </div>
         </div>
       </div>
@@ -128,6 +134,14 @@
           <div class="row" style="font-size:12px">
             <span id="ui_ergo_load_lbl">ภาระกดทับกระดูกคอ:</span>
             <b id="ergo_load">5.0 kg (11 lbs)</b>
+          </div>
+          <div class="row" style="font-size:12px; margin-top:4px">
+            <span id="ui_ergo_cobb_lbl">แนวกระดูกสันหลัง (Cobb Angle):</span>
+            <b id="ergo_cobb">0.0° (ปกติ)</b>
+          </div>
+          <div class="row" style="font-size:12px; margin-top:4px">
+            <span id="ui_ergo_crom_lbl">การเคลื่อนไหวคอ (CROM):</span>
+            <b id="ergo_crom">ปกติ (Normal)</b>
           </div>
           <div class="ergo-bar-wrap">
             <div class="ergo-bar" id="ergo_bar" style="width:15%; background:var(--ok)"></div>

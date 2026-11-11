@@ -1,52 +1,64 @@
-// Web Audio cues: posture alert chime and S1/S2 heart sounds
+// Web Audio cues: posture alert chime and physiological S1/S2 heart sounds
 let audioCtx = null, lastChime = 0;
+
+function getAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
 export function playSoftChime(enabled) {
   if (!enabled) return;
   const now = performance.now();
   if (now - lastChime < 4000) return;
   lastChime = now;
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
-    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.38);
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.4);
   } catch(e) {}
 }
 
-let lastHeartBeat = 0;
-export function playHeartSound(now, enabled, bpm) {
+// S1 ("Lub"): AV Valve Closure (Mitral & Tricuspid) - Low pitch, booming (~45-65 Hz)
+export function playS1(enabled) {
   if (!enabled) return;
-  if (now - lastHeartBeat < (60000 / bpm) * 0.75) return;
-  lastHeartBeat = now;
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const o1 = audioCtx.createOscillator(), g1 = audioCtx.createGain();
-    o1.type = "sine";
-    o1.frequency.setValueAtTime(68, audioCtx.currentTime);
-    o1.frequency.exponentialRampToValueAtTime(45, audioCtx.currentTime + 0.11);
-    g1.gain.setValueAtTime(0.14, audioCtx.currentTime);
-    g1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.13);
-    o1.connect(g1); g1.connect(audioCtx.destination);
-    o1.start(); o1.stop(audioCtx.currentTime + 0.14);
-
-    setTimeout(() => {
-      try {
-        const o2 = audioCtx.createOscillator(), g2 = audioCtx.createGain();
-        o2.type = "sine";
-        o2.frequency.setValueAtTime(54, audioCtx.currentTime);
-        o2.frequency.exponentialRampToValueAtTime(36, audioCtx.currentTime + 0.12);
-        g2.gain.setValueAtTime(0.12, audioCtx.currentTime);
-        g2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.14);
-        o2.connect(g2); g2.connect(audioCtx.destination);
-        o2.start(); o2.stop(audioCtx.currentTime + 0.15);
-      } catch(e) {}
-    }, 135);
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(65, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(42, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.15);
   } catch(e) {}
+}
+
+// S2 ("Dub"): Semilunar Valve Closure (Aortic & Pulmonic) - Slightly higher, sharper (~55-80 Hz)
+export function playS2(enabled) {
+  if (!enabled) return;
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(82, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.09);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.11);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.12);
+  } catch(e) {}
+}
+
+// Legacy fallback
+export function playHeartSound(now, enabled, bpm) {
+  playS1(enabled);
+  setTimeout(() => playS2(enabled), 140);
 }
