@@ -54,7 +54,7 @@ anatophysio-ar/
 - Phase 1 ✅ แยก CSS / JS / binary assets ออกจาก HTML
 - Phase 1b ✅ แยกส่วนที่ไม่ผูก state ออกเป็นโมดูล; ส่วน state/scene/tracking ยังอยู่ใน `main.js`
 - Phase 2 ✅ ผสาน MediaPipe PoseLandmarker (33 จุด) + Articulated Skeleton (กระดูกและอวัยวะขยับตามการเคลื่อนไหวจริง) + แก้ไข Anatomical Situs หัวใจ/ปอด + ตัวชี้วัดสรีรศาสตร์แบบเรียลไทม์ (Shoulder tilt, Torso turn, Elbow & Knee flexion)
-- Phase 3 ⏳ rPPG สกัดชีพจรจริงจากสีผิวใบหน้า, Wiggers cardiac cycle, เครื่องมือวัด CROM / TMJ / Cobb angle
+- Phase 3 ✅ ระบบวัดสัญญาณชีพไร้สัมผัส rPPG (Remote Photoplethysmography สกัดชีพจรจริงจากสีผิวหน้าผาก), วงจรหัวใจตามสรีรวิทยา Wiggers Cardiac Cycle พร้อมคลื่นไฟฟ้าหัวใจ Lead II ECG บนหน้าจอ HUD, เสียงลิ้นหัวใจ S1/S2 ตรงจังหวะมิลลิวินาที, เครื่องมือวัดทางคลินิก (Cobb Angle ประเมินกระดูกสันหลังคด, CROM ช่วงการเคลื่อนไหวคอ, TMJ ระยะอ้าปาก)
 - Phase 4 ⏳ พจนานุกรม FMA/SNOMED CT และคู่มือวิชาการทางการแพทย์
 
 > ⚠️ เครื่องมือเพื่อการศึกษา ไม่ใช่อุปกรณ์การแพทย์สำหรับวินิจฉัย
