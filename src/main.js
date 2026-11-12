@@ -65,6 +65,13 @@ function updateUILanguage() {
   const setTxt = (id, str) => { const el = $(id); if (el) el.textContent = str; };
   setTxt("ui_title", t.title);
   setTxt("start", t.start_cam);
+  setTxt("start_demo", S.lang === "th" ? "🎮 โหมดจำลอง 3D (Demo Mode)" : S.lang === "en" ? "🎮 3D Demo Mode" : "🎮 โหมดจำลอง 3D (Demo Mode)");
+  setTxt("intro_h2", "AnatoPhysio AR");
+  setTxt("intro_p", S.lang === "th"
+    ? "ส่องดูกายวิภาคโครงกระดูกทั้งตัว สมองรอยหยัก หัวใจ 4 ห้องเต้นบิดเกลียว ปอด หลอดเลือดดวงตา และวิเคราะห์สรีรศาสตร์แบบเรียลไทม์"
+    : S.lang === "en"
+    ? "Explore full-body skeleton, gyri/sulci brain, 4-chamber helical heart, lungs, ocular vasculature & real-time ergonomics mirror"
+    : "ส่องดูกายวิภาคโครงกระดูกทั้งตัว สมองรอยหยัก หัวใจ 4 ห้อง ปอด หลอดเลือดดวงตา และสรีรศาสตร์ (Full-body Anatomy & Physiology)");
   setTxt("tab_lbl_layers", t.tab_layers);
   setTxt("tab_lbl_cardiac", t.tab_cardiac);
   setTxt("tab_lbl_ergo", t.tab_ergo);
@@ -1275,7 +1282,10 @@ function populateAnatomySelect() {
   }
 }
 
+let booted = false;
 async function boot() {
+  if (booted) return;
+  booted = true;
   THREE = await import(DEMO && new URLSearchParams(location.search).get("three") || THREE_URL);
   setThree(THREE);
   initMath(); initHandMath(); buildScene();
@@ -1333,15 +1343,150 @@ async function boot() {
   }
 }
 
-$("start").onclick = async () => {
+// ------------------------------ Camera Acquisition & Diagnostics ------------------------------
+
+async function requestCameraStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      const err = new Error("Insecure context: WebRTC requires localhost or HTTPS.");
+      err.name = "InsecureContextError";
+      throw err;
+    }
+    const err = new Error("This browser does not support getUserMedia WebRTC.");
+    err.name = "NotSupportedError";
+    throw err;
+  }
+
+  // Tier 1: Ideal HD front user-facing camera
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+  } catch (err1) {
+    console.warn("Camera Tier 1 (facingMode:user, 720p) failed:", err1);
+    if (err1.name === "NotAllowedError" || err1.name === "SecurityError") throw err1;
+  }
+
+  // Tier 2: HD without facingMode (many USB / external / virtual webcams reject facingMode)
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+  } catch (err2) {
+    console.warn("Camera Tier 2 (720p without facingMode) failed:", err2);
+    if (err2.name === "NotAllowedError" || err2.name === "SecurityError") throw err2;
+  }
+
+  // Tier 3: Standard VGA 640x480
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false
+    });
+  } catch (err3) {
+    console.warn("Camera Tier 3 (VGA 640x480) failed:", err3);
+    if (err3.name === "NotAllowedError" || err3.name === "SecurityError") throw err3;
+  }
+
+  // Tier 4: Minimal constraint fallback
+  return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+}
+
+function showCameraTroubleshooting(err) {
+  const panel = $("cam_troubleshoot");
+  if (!panel) return;
+  panel.style.display = "block";
+  const title = $("cam_err_title");
+  const desc = $("cam_err_desc");
+  const steps = $("cam_err_steps");
+
+  const errName = err ? err.name : "UnknownError";
+  const isThai = S.lang !== "en";
+
+  if (errName === "NotAllowedError" || errName === "PermissionDeniedError" || errName === "SecurityError") {
+    if (title) title.textContent = isThai ? "⚠️ ถูกบล็อกสิทธิ์การเข้าถึงกล้อง (Camera Permission Blocked)" : "⚠️ Camera Permission Blocked";
+    if (desc) desc.innerHTML = isThai
+      ? "เบราว์เซอร์หรือระบบปฏิบัติการไม่อนุญาตให้หน้านี้เข้าถึงกล้อง กรุณาเปิดสิทธิ์ตามขั้นตอนด้านล่าง:"
+      : "Camera access was denied by your browser or operating system settings. Follow these steps:";
+    if (steps) steps.innerHTML = isThai
+      ? `<ol style="margin:0;padding-left:18px;">
+           <li style="margin-bottom:6px;"><b>แถบ URL ของเบราว์เซอร์:</b> คลิกไอคอน <b>แม่กุญแจ 🔒</b> หรือ <b>กล้อง 📷</b> ที่ด้านซ้ายสุดของช่องพิมพ์ URL ➔ ปรับตัวเลือก <i>"กล้อง (Camera)"</i> ให้เป็น <b>"อนุญาต (Allow)"</b></li>
+           <li style="margin-bottom:6px;"><b>สำหรับ macOS:</b> เปิด <b>System Settings (การตั้งค่าระบบ)</b> ➔ <b>Privacy & Security (ความเป็นส่วนตัวและความปลอดภัย)</b> ➔ <b>Camera (กล้อง)</b> ➔ ตรวจสอบว่าเปิดสวิตช์อนุญาตให้กับ Google Chrome / Safari หรือไม่</li>
+           <li>คลิกปุ่ม <b>"🔄 ลองเปิดกล้องอีกครั้ง"</b> หรือรีเฟรชหน้าเว็บ</li>
+         </ol>`
+      : `<ol style="margin:0;padding-left:18px;">
+           <li style="margin-bottom:6px;"><b>Browser URL bar:</b> Click the <b>Lock 🔒</b> or <b>Camera 📷</b> icon on the left ➔ Set <i>"Camera"</i> to <b>"Allow"</b>.</li>
+           <li style="margin-bottom:6px;"><b>macOS System Settings:</b> Go to <b>System Settings</b> ➔ <b>Privacy & Security</b> ➔ <b>Camera</b> ➔ Ensure Google Chrome / Safari is enabled.</li>
+           <li>Click <b>"🔄 Retry Camera"</b> or refresh the page.</li>
+         </ol>`;
+  } else if (errName === "NotReadableError" || errName === "TrackStartError") {
+    if (title) title.textContent = isThai ? "⚠️ กล้องกำลังถูกใช้งานโดยแอปอื่น (Camera Busy / In Use)" : "⚠️ Camera is Busy / In Use by Another App";
+    if (desc) desc.innerHTML = isThai
+      ? "ฮาร์ดแวร์เว็บแคมกำลังถูกเชื่อมต่อหรือล็อกโดยโปรแกรมอื่นในเครื่อง:"
+      : "The camera device is locked or in use by another program:";
+    if (steps) steps.innerHTML = isThai
+      ? `<ol style="margin:0;padding-left:18px;">
+           <li style="margin-bottom:6px;">ปิดโปรแกรมที่อาจกำลังเปิดกล้องอยู่ เช่น <b>FaceTime, Zoom, Microsoft Teams, Photo Booth, OBS Studio, Discord</b> หรือแท็บเบราว์เซอร์อื่น</li>
+           <li style="margin-bottom:6px;">หากใช้เว็บแคม USB หรือ Continuity Camera (iPhone) ให้ลองเชื่อมต่อใหม่</li>
+           <li>คลิก <b>"🔄 ลองเปิดกล้องอีกครั้ง"</b> หรือเลือก <b>"🚀 เข้าสู่โหมดจำลอง 3D ทันที"</b></li>
+         </ol>`
+      : `<ol style="margin:0;padding-left:18px;">
+           <li style="margin-bottom:6px;">Close other video applications (e.g. <b>FaceTime, Zoom, Teams, Photo Booth, OBS, Discord</b>).</li>
+           <li style="margin-bottom:6px;">If using external USB or Continuity Camera, re-connect it.</li>
+           <li>Click <b>"🔄 Retry Camera"</b> or <b>"🚀 Launch 3D Demo Mode"</b>.</li>
+         </ol>`;
+  } else if (errName === "InsecureContextError") {
+    if (title) title.textContent = isThai ? "⚠️ เบราว์เซอร์ต้องการ Secure Context (localhost หรือ HTTPS)" : "⚠️ Secure Context (localhost / HTTPS) Required";
+    if (desc) desc.innerHTML = isThai
+      ? "เทคโนโลยี WebRTC ของเบราว์เซอร์ไม่อนุญาตให้เปิดกล้องผ่าน HTTP บน IP เครือข่าย (เช่น 192.168.x.x)"
+      : "WebRTC camera access requires a secure context (localhost or HTTPS).";
+    if (steps) steps.innerHTML = isThai
+      ? `กรุณาเข้าใช้งานผ่านลิงก์ <b><a href="http://localhost/anatophysio-ar/" style="color:#58c5ff;text-decoration:underline;">http://localhost/anatophysio-ar/</a></b> หรือ <b><a href="http://localhost/x-ray/" style="color:#58c5ff;text-decoration:underline;">http://localhost/x-ray/</a></b> หรือเปิดใช้งาน HTTPS`
+      : `Please access via <b><a href="http://localhost/anatophysio-ar/" style="color:#58c5ff;text-decoration:underline;">http://localhost/anatophysio-ar/</a></b> or use HTTPS.`;
+  } else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+    if (title) title.textContent = isThai ? "⚠️ ไม่พบอุปกรณ์เว็บแคม (No Camera Found)" : "⚠️ No Camera Device Detected";
+    if (desc) desc.innerHTML = isThai
+      ? "ระบบไม่พบเว็บแคมที่เชื่อมต่ออยู่กับคอมพิวเตอร์ของคุณ:"
+      : "No video input devices were found on this computer:";
+    if (steps) steps.innerHTML = isThai
+      ? `กรุณาเชื่อมต่อเว็บแคม หรือคลิกปุ่ม <b>"🚀 เข้าสู่โหมดจำลอง 3D ทันที"</b> เพื่อใช้งานกายวิภาคและสรีรวิทยาได้ครบทุกฟังก์ชันโดยไม่ต้องใช้กล้อง`
+      : `Please connect a webcam, or click <b>"🚀 Launch 3D Demo Mode"</b> below to experience all anatomy & physiology features.`;
+  } else {
+    if (title) title.textContent = isThai ? "⚠️ เกิดข้อผิดพลาดในการเปิดกล้อง (" + errName + ")" : "⚠️ Camera Initialization Error (" + errName + ")";
+    if (desc) desc.textContent = (err && err.message) ? err.message : String(err);
+    if (steps) steps.innerHTML = isThai
+      ? `คุณสามารถกดปุ่ม <b>"🚀 เข้าสู่โหมดจำลอง 3D ทันที"</b> ด้านล่าง เพื่อเข้าใช้งานระบบได้ทันที`
+      : `You can click <b>"🚀 Launch 3D Demo Mode"</b> below to experience the system immediately.`;
+  }
+}
+
+async function startDemoMode() {
+  if ($("start")) $("start").disabled = true;
+  if ($("start_demo")) $("start_demo").disabled = true;
+  if ($("cam_troubleshoot")) $("cam_troubleshoot").style.display = "none";
+  setStatus(S.lang === "th" ? "กำลังเริ่มระบบกายวิภาคจำลอง 3D…" : "Initializing 3D Anatomy Simulation…");
+  try {
+    await boot();
+    $("intro").hidden = true;
+    resize();
+    demoLoop();
+  } catch (e) {
+    setStatus("Demo failed: " + e.message, "bad");
+    if ($("start")) $("start").disabled = false;
+    if ($("start_demo")) $("start_demo").disabled = false;
+  }
+}
+
+async function startCameraMode() {
   $("start").disabled = true;
+  if ($("start_demo")) $("start_demo").disabled = true;
+  if ($("cam_troubleshoot")) $("cam_troubleshoot").style.display = "none";
   let stageName = "camera";
   try {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
-      throw new Error("this browser will not give this page a camera. Try Chrome or Edge.");
-    setStatus("Asking for the camera… / กำลังขอสิทธิ์เปิดกล้อง…");
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    setStatus("Asking for the camera… / กำลังขอสิทธิ์เปิดกล้อง (กรุณากด Allow บนเบราว์เซอร์)…");
+    const stream = await requestCameraStream();
     video.srcObject = stream;
     await video.play();
     if (video.videoWidth && video.videoHeight) stage.style.setProperty("--ar", (video.videoWidth / video.videoHeight).toFixed(4));
@@ -1356,12 +1501,20 @@ $("start").onclick = async () => {
     resize();
     liveLoop();
   } catch (err) {
-    $("start").disabled = false; $("intro").hidden = false;
+    $("start").disabled = false;
+    if ($("start_demo")) $("start_demo").disabled = false;
+    $("intro").hidden = false;
     const denied = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
     const msg = err && err.message ? err.message : String(err);
     setStatus(denied ? "Camera blocked. Allow camera access for this page and click Start again."
             : "Could not load the " + stageName + ": " + msg, "bad");
+    showCameraTroubleshooting(err);
   }
-};
+}
+
+$("start").onclick = startCameraMode;
+if ($("start_demo")) $("start_demo").onclick = startDemoMode;
+if ($("btn_retry_cam")) $("btn_retry_cam").onclick = () => { if ($("cam_troubleshoot")) $("cam_troubleshoot").style.display = "none"; startCameraMode(); };
+if ($("btn_use_demo")) $("btn_use_demo").onclick = startDemoMode;
 
 if (DEMO) boot().then(demoLoop).catch(e => setStatus("Demo failed: " + e.message, "bad"));

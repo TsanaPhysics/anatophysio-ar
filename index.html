@@ -46,9 +46,25 @@
 
       <!-- Intro Overlay -->
       <div id="intro">
-        <h2 id="intro_h2">X-RAY MIRROR</h2>
-        <p id="intro_p">ส่องดูกายวิภาคโครงกระดูกทั้งตัว หัวใจ 4 ห้องเต้นบิดเกลียว ปอด และวิเคราะห์สรีรศาสตร์แบบเรียลไทม์</p>
-        <button class="big" id="start">เปิดกล้อง (Start camera)</button>
+        <h2 id="intro_h2">AnatoPhysio AR</h2>
+        <p id="intro_p">ส่องดูกายวิภาคโครงกระดูกทั้งตัว สมองรอยหยัก หัวใจ 4 ห้องเต้นบิดเกลียว ปอด หลอดเลือดดวงตา และวิเคราะห์สรีรศาสตร์แบบเรียลไทม์</p>
+        <div class="intro-actions" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
+          <button class="big" id="start">📷 เปิดกล้อง (Start Camera)</button>
+          <button class="big secondary" id="start_demo" style="background:#172235;color:#58c5ff;border:1px solid #2a3a55;box-shadow:none;">🎮 โหมดจำลอง 3D (Demo Mode)</button>
+        </div>
+
+        <!-- Camera Troubleshooting & Diagnostics Panel -->
+        <div id="cam_troubleshoot" style="display:none;max-width:540px;text-align:left;background:rgba(15,23,42,0.96);border:1px solid #ef4444;border-radius:12px;padding:16px 18px;margin-top:12px;box-shadow:0 8px 30px rgba(0,0,0,0.65);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;color:#f87171;font-weight:700;font-size:14px;">
+            <span style="font-size:18px;">⚠️</span> <span id="cam_err_title">ไม่สามารถเปิดกล้องเว็บแคมได้ (Camera Access Error)</span>
+          </div>
+          <div id="cam_err_desc" style="font-size:12.5px;color:#cbd5e1;line-height:1.55;margin-bottom:10px;"></div>
+          <div id="cam_err_steps" style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:12px;background:rgba(0,0,0,0.35);padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button id="btn_retry_cam" type="button" style="flex:1;min-width:140px;background:#2563eb;color:#fff;border:none;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12.5px;box-shadow:0 2px 10px rgba(37,99,235,0.4);">🔄 ลองเปิดกล้องอีกครั้ง</button>
+            <button id="btn_use_demo" type="button" style="flex:1;min-width:160px;background:#059669;color:#fff;border:none;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12.5px;box-shadow:0 2px 10px rgba(5,150,105,0.4);">🚀 เข้าสู่โหมดจำลอง 3D ทันที</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
