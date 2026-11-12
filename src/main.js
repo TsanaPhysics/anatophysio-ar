@@ -4,7 +4,7 @@ import { ANATOMY_DICT } from "./anatomy/dictionary.js";
 import { THORAX_LABELS } from "./anatomy/thorax-labels.js";
 import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeometry,
          buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildSkeletonParts, buildFullSkeletonGeometry,
-         applyBrainGyriAndSulci, buildDigitalBrainConnectome } from "./anatomy/procedural.js";
+         applyBrainGyriAndSulci, buildDigitalBrainConnectome, buildOcularVasculature } from "./anatomy/procedural.js";
 import { UI_TEXT } from "./ui/i18n.js";
 import { VERT, FRAG } from "./shaders/xray.js";
 import { playSoftChime, playHeartSound, playS1, playS2 } from "./audio/sounds.js";
@@ -87,6 +87,8 @@ function updateUILanguage() {
   setTxt("ui_ck_brain", t.ck_brain);
   setTxt("ui_ck_muscles", t.ck_muscles);
   setTxt("ui_ck_eyes", t.ck_eyes);
+  setTxt("ui_ck_eye_vessels", t.ck_eye_vessels);
+  setTxt("ui_ck_fundus", t.ck_fundus);
   setTxt("ui_ck_outline", t.ck_outline);
   setTxt("ui_ck_labels", t.ck_labels);
   setTxt("ui_inspector_lbl", t.inspector_lbl);
@@ -138,7 +140,8 @@ function updateUILanguage() {
 
 // ------------------------------ settings ------------------------------
 const DEFAULTS = {
-  skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false, eyes: true, outline: true, hands: true,
+  skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false,
+  eyes: true, eye_vessels: true, fundusHud: true, outline: true, hands: true,
   ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true,
   bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
@@ -149,13 +152,15 @@ let S = Object.assign({}, DEFAULTS);
 try { Object.assign(S, JSON.parse(localStorage.getItem("xr_settings") || "{}")); } catch (e) {}
 function save() { try { localStorage.setItem("xr_settings", JSON.stringify(S)); } catch (e) {} }
 
-const LAYERS = ["skull", "brain", "digital_brain", "muscles", "eyes", "outline", "hands", "ribs", "heart", "lungs", "cartilage", "skeleton"];
+const LAYERS = ["skull", "brain", "digital_brain", "muscles", "eyes", "eye_vessels", "outline", "hands", "ribs", "heart", "lungs", "cartilage", "skeleton"];
 const SLIDERS = ["bright", "real", "feather", "cut", "fs", "fw", "fh", "fd", "fx", "fy", "fz", "bpm", "resp"];
 
 function syncUI() {
   for (const k of LAYERS) { const el = $("L_" + k); if (el) el.checked = !!S[k]; }
   if ($("L_deep_learning")) $("L_deep_learning").checked = !!S.deep_learning;
+  if ($("fundus_hud")) $("fundus_hud").checked = !!S.fundusHud;
   if (digitalBrainGroup) digitalBrainGroup.visible = !!S.digital_brain;
+  if (eyeVasculatureGroup) eyeVasculatureGroup.visible = !!S.eye_vessels;
   for (const b of $("style").children) b.classList.toggle("on", b.dataset.style === S.style);
   for (const b of $("lang_seg").children) b.classList.toggle("on", b.dataset.lang === S.lang);
   $("ergo_enable").checked = S.ergo;
@@ -183,10 +188,12 @@ for (const k of LAYERS) {
   if (el) el.onchange = e => {
     S[k] = e.target.checked;
     if (k === "digital_brain" && digitalBrainGroup) digitalBrainGroup.visible = S[k];
+    if (k === "eye_vessels" && eyeVasculatureGroup) eyeVasculatureGroup.visible = S[k];
     save();
   };
 }
 if ($("L_deep_learning")) $("L_deep_learning").onchange = e => { S.deep_learning = e.target.checked; save(); };
+if ($("fundus_hud")) $("fundus_hud").onchange = e => { S.fundusHud = e.target.checked; save(); };
 for (const b of $("style").children) b.onclick = () => { S.style = b.dataset.style; save(); syncUI(); applyStyle(); };
 for (const b of $("lang_seg").children) b.onclick = () => { S.lang = b.dataset.lang; save(); syncUI(); };
 $("ergo_enable").onchange = e => { S.ergo = e.target.checked; save(); };
@@ -214,6 +221,8 @@ for (const b of document.querySelectorAll("[data-preset]")) b.onclick = () => {
     S.skeleton = false; S.ribs = true; S.skull = false; S.eyes = false; S.heart = true; S.cartilage = true; S.lungs = true; S.brain = false; S.muscles = false; S.outline = true;
   } else if (p === "skull") {
     S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.muscles = false; S.outline = true;
+  } else if (p === "eyes") {
+    S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.eye_vessels = true; S.fundusHud = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.digital_brain = false; S.muscles = false; S.outline = true;
   } else if (p === "brain") {
     S.skeleton = false; S.ribs = false; S.skull = false; S.eyes = false; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.digital_brain = false; S.muscles = false; S.outline = true;
   } else if (p === "digital_brain") {
@@ -232,6 +241,7 @@ let THREE, renderer, headScene, handScene, cam, ortho, headGroup, jawPivot, base
 let heartGroup = null, lungsGroup = null, ribsGroup = null, skelGroup = null;
 let bodyGroup = null, bodyRig = null;
 let digitalBrainGroup = null, digitalBrainLines = null, digitalBrainNodes = null;
+let eyeVasculatureGroup = null, eyeArteryLines = null, eyeVeinLines = null;
 let lastInferMs = 14.5;
 const limbMeshes = {};
 const rppgDetector = new RPPGDetector(6);
@@ -323,6 +333,30 @@ function buildScene() {
   digitalBrainGroup.add(digitalBrainNodes);
   digitalBrainGroup.visible = !!S.digital_brain;
   headGroup.add(digitalBrainGroup);
+
+  // Ocular Structures & Vasculature (Central Retinal Artery/Vein, Optic Nerve & Lens)
+  const eyeVas = buildOcularVasculature();
+  const eyeArtMat = new THREE.LineBasicMaterial({
+    color: 0xff2a4b, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+  });
+  eyeArteryLines = new THREE.LineSegments(eyeVas.arteryGeo, eyeArtMat);
+  eyeArteryLines.matrixAutoUpdate = false; eyeArteryLines.frustumCulled = false;
+
+  const eyeVeinMat = new THREE.LineBasicMaterial({
+    color: 0xb81b4c, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending
+  });
+  eyeVeinLines = new THREE.LineSegments(eyeVas.veinGeo, eyeVeinMat);
+  eyeVeinLines.matrixAutoUpdate = false; eyeVeinLines.frustumCulled = false;
+
+  const eyeStructMesh = new THREE.Mesh(eyeVas.structuresGeo, makeMat(0x88ddff, 0xe2f1f8));
+  eyeStructMesh.matrixAutoUpdate = false; eyeStructMesh.frustumCulled = false;
+
+  eyeVasculatureGroup = new THREE.Group();
+  eyeVasculatureGroup.add(eyeArteryLines);
+  eyeVasculatureGroup.add(eyeVeinLines);
+  eyeVasculatureGroup.add(eyeStructMesh);
+  eyeVasculatureGroup.visible = !!S.eye_vessels;
+  headGroup.add(eyeVasculatureGroup);
 
   // Body group & Rig (Thorax, Viscera, Spine, Pelvis & Limbs)
   bodyGroup = new THREE.Group(); bodyGroup.matrixAutoUpdate = false;
@@ -526,7 +560,7 @@ function drawHandVeil(g, lms, alpha) {
 
 // ------------------------------ labels ------------------------------
 const LABEL_COLOR = {
-  skull: "#d9f0ff", brain: "#ffc2d6", muscles: "#ffb3aa", eyes: "#fff3a8", hands: "#d9f0ff",
+  skull: "#d9f0ff", brain: "#ffc2d6", muscles: "#ffb3aa", eyes: "#fff3a8", eye_vessels: "#ff4d68", hands: "#d9f0ff",
   ribs: "#bfe3ff", heart: "#ff5d73", lungs: "#55e0c5", cartilage: "#88ddff", skeleton: "#bfe3ff"
 };
 const HEAD_C = [0, 3.2, -4.8];
@@ -780,6 +814,95 @@ function drawDeepLearningHUD(g, now, inferMs) {
   g.restore();
 }
 
+function drawFundusHUD(g, now) {
+  const boxW = Math.min(270, W * 0.44), boxH = 92;
+  const bx = 14, by = 126;
+  g.save();
+
+  // Glassmorphic background
+  g.fillStyle = "rgba(10, 14, 24, 0.90)";
+  g.strokeStyle = "rgba(255, 77, 104, 0.45)";
+  g.lineWidth = 1;
+  const r = 8;
+  g.beginPath();
+  g.moveTo(bx + r, by); g.lineTo(bx + boxW - r, by); g.quadraticCurveTo(bx + boxW, by, bx + boxW, by + r);
+  g.lineTo(bx + boxW, by + boxH - r); g.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - r, by + boxH);
+  g.lineTo(bx + r, by + boxH); g.quadraticCurveTo(bx, by + boxH, bx, by + boxH - r);
+  g.lineTo(bx, by + r); g.quadraticCurveTo(bx, by, bx + r, by);
+  g.closePath();
+  g.fill(); g.stroke();
+
+  // 1. Ophthalmoscopic Circular Retina Viewport
+  const eyeCx = bx + 42, eyeCy = by + 46, eyeR = 32;
+  g.save();
+  g.beginPath();
+  g.arc(eyeCx, eyeCy, eyeR, 0, Math.PI * 2);
+  g.clip();
+
+  // Warm retinal reflex background
+  const grad = g.createRadialGradient(eyeCx, eyeCy, 4, eyeCx, eyeCy, eyeR);
+  grad.addColorStop(0, "#e67e22");
+  grad.addColorStop(0.65, "#c0392b");
+  grad.addColorStop(1, "#641e16");
+  g.fillStyle = grad;
+  g.fillRect(eyeCx - eyeR, eyeCy - eyeR, eyeR * 2, eyeR * 2);
+
+  // Optic disc (nasal side, slightly right)
+  const discX = eyeCx + 10, discY = eyeCy - 2;
+  g.fillStyle = "#f9ca24";
+  g.beginPath(); g.arc(discX, discY, 6.5, 0, Math.PI * 2); g.fill();
+  g.fillStyle = "#f6e58d";
+  g.beginPath(); g.arc(discX + 1, discY, 3.0, 0, Math.PI * 2); g.fill(); // Cup
+
+  // Central Retinal Arterioles (bright red, pulsating)
+  const pulse = 0.5 + 0.5 * Math.sin(now / 150);
+  g.strokeStyle = "#ff4757";
+  g.lineWidth = 1.2 + pulse * 0.4;
+  g.beginPath(); g.moveTo(discX, discY); g.quadraticCurveTo(discX - 9, discY - 16, discX - 20, discY - 12); g.stroke();
+  g.beginPath(); g.moveTo(discX, discY); g.quadraticCurveTo(discX - 9, discY + 16, discX - 20, discY + 12); g.stroke();
+  g.beginPath(); g.moveTo(discX, discY); g.lineTo(discX + 7, discY - 10); g.stroke();
+  g.beginPath(); g.moveTo(discX, discY); g.lineTo(discX + 7, discY + 10); g.stroke();
+
+  // Central Retinal Venules (darker crimson, thicker)
+  g.strokeStyle = "#a81d45";
+  g.lineWidth = 1.8;
+  g.beginPath(); g.moveTo(discX + 1, discY); g.quadraticCurveTo(discX - 7, discY - 18, discX - 22, discY - 16); g.stroke();
+  g.beginPath(); g.moveTo(discX + 1, discY); g.quadraticCurveTo(discX - 7, discY + 18, discX - 22, discY + 16); g.stroke();
+
+  // Macula lutea & fovea centralis (temporal side)
+  const maculaX = eyeCx - 8, maculaY = eyeCy;
+  g.fillStyle = "rgba(74, 20, 20, 0.45)";
+  g.beginPath(); g.arc(maculaX, maculaY, 6, 0, Math.PI * 2); g.fill();
+  g.fillStyle = "#fff5a5";
+  g.beginPath(); g.arc(maculaX, maculaY, 1.2, 0, Math.PI * 2); g.fill(); // Foveal reflex
+
+  g.restore(); // end clip
+
+  // Border ring around fundus viewport
+  g.strokeStyle = "rgba(255, 77, 104, 0.75)";
+  g.lineWidth = 1.5;
+  g.beginPath(); g.arc(eyeCx, eyeCy, eyeR, 0, Math.PI * 2); g.stroke();
+
+  // 2. Clinical Telemetry Text
+  const tx = bx + 84;
+  g.font = "700 10.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#ff6b81";
+  g.textAlign = "left"; g.textBaseline = "top";
+  g.fillText("👁️ " + (S.lang === "en" ? "RETINAL FUNDUSCOPY" : "ตรวจจอตาและหลอดเลือด"), tx, by + 10);
+
+  g.font = "500 10px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#eef2fa";
+  g.fillText("A:V Ratio: 2:3 (Normal)", tx, by + 26);
+  g.fillText("Cup/Disc: 0.3 (No Glaucoma)", tx, by + 40);
+  g.fillText("CRA / CRV: Clear Arcade", tx, by + 54);
+
+  g.font = "600 9.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#2ed573";
+  g.fillText("● Macula & Fovea: Intact", tx, by + 70);
+
+  g.restore();
+}
+
 function drawECGHUD(g, wState, rppgRes) {
   if (!S.ecgHud) return;
   const boxW = Math.min(270, W * 0.44), boxH = 76;
@@ -942,6 +1065,14 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
     if (digitalBrainNodes) digitalBrainNodes.material.size = 4.0 + 2.0 * Math.sin(t * 12.0);
   }
 
+  // 4. Ocular & Retinal Blood Vessels Arterial Pulse
+  if (eyeVasculatureGroup && eyeVasculatureGroup.visible) {
+    if (eyeArteryLines) {
+      const artPulse = 0.8 + 0.25 * Math.sin(now / 150);
+      eyeArteryLines.material.opacity = artPulse;
+    }
+  }
+
   let mask = "none", lens = null;
   if (S.reveal === "lens") {
     const rad = (0.07 + 0.38 * S.cut) * W;
@@ -965,6 +1096,7 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
   if (S.labels) drawLabels(g, lens);
   drawECGHUD(g, wState, rppgLatest);
   if (S.deep_learning) drawDeepLearningHUD(g, now, lastInferMs);
+  if (S.fundusHud && (S.eye_vessels || S.eyes)) drawFundusHUD(g, now);
 
   // Ergonomics computation & HUD overlay
   if (head.found && headGroup.visible) {

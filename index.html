@@ -23,6 +23,7 @@
           <button data-preset="thorax" id="qp_thorax">🫀 Thorax</button>
           <button data-preset="lungs" id="qp_lungs">🫁 Lungs</button>
           <button data-preset="skull" id="qp_skull">🩻 Skull</button>
+          <button data-preset="eyes" id="qp_eyes">👁️ Eyes & Vessels</button>
           <button data-preset="brain" id="qp_brain">🧠 Brain</button>
           <button data-preset="digital_brain" id="qp_digital_brain">⚡ AI Brain</button>
           <button data-preset="muscles" id="qp_muscles">💪 Muscles</button>
@@ -127,10 +128,12 @@
             <label class="ck"><input type="checkbox" id="L_skull" checked><i style="background:#bfe3ff"></i><span id="ui_ck_skull">กะโหลกศีรษะ</span></label>
             <label class="ck"><input type="checkbox" id="L_muscles"><i style="background:#ff6b5e"></i><span id="ui_ck_muscles">กล้ามเนื้อ</span></label>
             <label class="ck"><input type="checkbox" id="L_eyes" checked><i style="background:#fff3a8"></i><span id="ui_ck_eyes">ดวงตา</span></label>
+            <label class="ck"><input type="checkbox" id="L_eye_vessels" checked><i style="background:#ff2a4b"></i><span id="ui_ck_eye_vessels">หลอดเลือดดวงตา</span></label>
             <label class="ck"><input type="checkbox" id="L_outline" checked><i style="background:#6fb6ff"></i><span id="ui_ck_outline">โครงร่างใบหน้า</span></label>
           </div>
-          <div class="row" style="margin-top:11px; padding-top:9px; border-top:1px solid var(--line)">
+          <div class="row" style="margin-top:11px; padding-top:9px; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center">
             <label class="ck" style="font-weight:700"><input type="checkbox" id="labels"><span id="ui_ck_labels">แสดงป้ายชื่อชี้บอก (Labels)</span></label>
+            <label class="ck" style="font-weight:600"><input type="checkbox" id="fundus_hud" checked><span id="ui_ck_fundus">ตรวจก้นตา (Funduscopy)</span></label>
           </div>
           <div style="margin-top:10px; padding-top:9px; border-top:1px solid var(--line)">
             <label for="anatomy_select" style="font-size:11.5px; font-weight:700; color:var(--dim); display:block; margin-bottom:5px" id="ui_inspector_lbl">🔬 ข้อมูลอวัยวะเชิงลึก (Clinical Ontology):</label>

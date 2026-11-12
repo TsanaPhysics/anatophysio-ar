@@ -104,6 +104,66 @@ export const ANATOMY_DICT = {
     desc: "อวัยวะรับภาพ ประกอบด้วยกระจกตา (Cornea), เลนส์แก้วตา, และจอประสาทตา (Retina)",
     clinical: "Blow-out fracture ของพื้นเบ้าตาอาจทำให้กล้ามเนื้อ Inferior rectus ติดขัด มองเห็นภาพซ้อน (Diplopia)"
   },
+  "Central retinal artery": {
+    th: "หลอดเลือดแดงจอประสาทตา",
+    en: "Central retinal artery",
+    la: "Arteria centralis retinae",
+    fma: "FMA:51403",
+    snomed: "53130003",
+    system: "Ocular Vasculature",
+    desc: "แขนงของ Ophthalmic artery วิ่งในแกนกลางเส้นประสาทตา CN II แตกกิ่งเลี้ยงเซลล์รับแสงจอประสาทตาทั้ง 4 ควอดรันต์",
+    clinical: "การอุดตันฉับพลัน (CRAO) ทำให้ตาบอดเฉียบพลันไร้ความเจ็บปวด พบภาพ Cherry-red spot ที่ Macula เป็นภาวะฉุกเฉินทางจักษุ"
+  },
+  "Central retinal vein": {
+    th: "หลอดเลือดดำจอประสาทตา",
+    en: "Central retinal vein",
+    la: "Vena centralis retinae",
+    fma: "FMA:51405",
+    snomed: "70003006",
+    system: "Ocular Vasculature",
+    desc: "นำเลือดดำจากจอประสาทตากลับเข้าสู่ Cavernous sinus มักมีขนาดเส้นผ่านศูนย์กลางใหญ่กว่าหลอดเลือดแดงคู่ขนาน (A:V ratio 2:3)",
+    clinical: "ภาวะ CRVO (Central Retinal Vein Occlusion) จากความดันโลหิตสูงหรือเบาหวาน ทำให้เกิดภาพ Blood and thunder fundus"
+  },
+  "Optic disc (CN II)": {
+    th: "จานประสาทตา (จุดบอด)",
+    en: "Optic disc (Blind spot)",
+    la: "Discus nervi optici",
+    fma: "FMA:58301",
+    snomed: "280628006",
+    system: "Visual Pathway",
+    desc: "จุดรวมใยประสาท Axon ของ Retinal ganglion cells กว่า 1.2 ล้านเส้นเพื่อรวมเป็น Optic nerve ไม่มีเซลล์รับแสงจึงเป็นจุดบอด",
+    clinical: "ภาวะความดันในกะโหลกศีรษะสูงทำให้เกิด Papilledema (จานประสาทตาบวมขอบเบลอ) และภาวะต้อหินทำให้ Cup-to-Disc ratio > 0.5"
+  },
+  "Macula & Fovea centralis": {
+    th: "จุดรับภาพชัดที่สุด (มาคูลาและโฟเวีย)",
+    en: "Macula & Fovea centralis",
+    la: "Macula lutea et Fovea centralis",
+    fma: "FMA:58303",
+    snomed: "362506000",
+    system: "Visual System",
+    desc: "บริเวณใจกลางจอตาที่มีความหนาแน่นของเซลล์โคนสูงสุด ให้ความคมชัดของสายตาสูงสุด (Visual acuity 20/20) ปลอดหลอดเลือด (FAZ)",
+    clinical: "โรคจุดภาพชัดที่จอตาเสื่อม (AMD) และเบาหวานขึ้นจอตา (Diabetic Macular Edema) ทำให้สูญเสียการมองเห็นส่วนกลางอย่างถาวร"
+  },
+  "Crystalline lens": {
+    th: "เลนส์แก้วตา",
+    en: "Crystalline lens",
+    la: "Lens crystallina",
+    fma: "FMA:58241",
+    snomed: "362508004",
+    system: "Refractive Media",
+    desc: "โครงสร้างใสรูปนูนสองด้าน ปรับความโค้งเพื่อโฟกัสภาพใกล้-ไกล (Accommodation) ด้วยกล้ามเนื้อ Ciliary muscle",
+    clinical: "ความขุ่นมัวของเลนส์คือโรคต้อกระจก (Cataract) ซึ่งเป็นสาเหตุตาบอดอันดับหนึ่งของโลกที่รักษาหายได้ด้วยการผ่าตัดเปลี่ยนเลนส์เทียม IOL"
+  },
+  "Iris & Pupil": {
+    th: "ม่านตาและรูม่านตา",
+    en: "Iris & Pupil",
+    la: "Iris et Pupilla",
+    fma: "FMA:58240",
+    snomed: "362507009",
+    system: "Ocular Optics",
+    desc: "ม่านตาควบคุมปริมาณแสงเข้าสู่ดวงตาผ่านรูม่านตาด้วยกล้ามเนื้อ Sphincter & Dilator pupillae ควบคุมโดยระบบประสาทอัตโนมัติ",
+    clinical: "ปฏิกิริยารูม่านตาต่อแสง (Pupillary Light Reflex) ใช้ประเมินการทำงานของเส้นประสาทสมองคู่ที่ II และ III ในภาวะโคม่าและอุบัติเหตุสมอง"
+  },
 
   // ==================== NEUROANATOMY (สมองและประสาท) ====================
   "Frontal lobe": {

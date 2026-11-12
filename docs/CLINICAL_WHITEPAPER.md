@@ -148,4 +148,11 @@ $$\theta_{\text{Cobb}} = \arctan\left(\frac{|\Delta X|}{|\Delta Y|}\right) \time
    * การสกัดสัญญาณชีพไร้สัมผัสผ่านสีผิวใบหน้า (Contactless rPPG Pulse Extraction)
    * การวิเคราะห์ชีวกลศาสตร์กระดูกคอ C1-C7 (Kapandji Load), ภาวะกระดูกสันหลังคด (Cobb Angle), CROM, TMJ, และรายงานตรวจคลินิก PDF
 
+#### 5.2 ระบบกายวิภาคดวงตาและโครงข่ายหลอดเลือดจอประสาทตา (Ocular Anatomy & Retinal Vasculature)
+* **Central Retinal Artery & Vein (CRA / CRV):** จำลองแนวหลอดเลือดแดงและดำจอประสาทตาทั้ง 4 ควอดรันต์ (Superior/Inferior Temporal & Nasal arcades) อัตราส่วน A:V ratio ปกติ 2:3
+* **Ciliary & Iris Vasculature:** วงแหวนหลอดเลือดแดงใหญ่ของม่านตา (Circulus arteriosus iridis major) และ Radial arterioles
+* **Optic Nerve Sheath (CN II):** ปลอกเส้นประสาทตาคู่ที่ 2 ทอดย้อนเข้าสู่ Apex ของเบ้าตา
+* **Simulated Retinal Fundoscopy HUD:** หน้าต่างจำลองมุมมองกล้องส่องตรวจก้นตา (Ophthalmoscope) แสดงภาพจานประสาทตา (Optic Disc), รอยหวำตรงกลาง (Physiological Cup, Cup-to-Disc ratio 0.3), จุดภาพชัด (Macula lutea), และจุดศูนย์กลางโฟเวีย (Fovea centralis) พร้อมการเต้นพัลส์หลอดเลือดแดงสอดคล้องกับจังหวะหัวใจจริง
+
+
 

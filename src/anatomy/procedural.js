@@ -477,3 +477,86 @@ export function buildDigitalBrainConnectome() {
 
   return { nodes, nodesGeo, axonsGeo };
 }
+
+// ------------------------------ 8. Ocular Structures & Vasculature (ดวงตาและหลอดเลือดจอตา) ------------------------------
+export function buildOcularVasculature() {
+  const eyeR = 1.45;
+  const eyes = [
+    { side: 1, cx: 3.08, cy: 2.37, cz: 2.14 },   // Subject's left eye
+    { side: -1, cx: -3.08, cy: 2.37, cz: 2.14 }  // Subject's right eye
+  ];
+
+  const arteryLines = [], veinLines = [], structGeos = [];
+
+  for (const { side, cx, cy, cz } of eyes) {
+    // 1. Optic disc at posterior-nasal pole
+    const discX = cx - side * 0.35;
+    const discY = cy + 0.1;
+    const discZ = cz - eyeR * 0.88;
+
+    // 2. Optic nerve sheath (CN II) running back toward apex of orbit
+    const nerveCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(discX, discY, discZ),
+      new THREE.Vector3(discX - side * 0.4, discY - 0.2, discZ - 2.8),
+      new THREE.Vector3(discX - side * 0.8, discY - 0.3, discZ - 5.5)
+    ]);
+    structGeos.push(new THREE.TubeGeometry(nerveCurve, 12, 0.38, 8, false));
+
+    // 3. Crystalline lens (biconvex)
+    const lens = new THREE.SphereGeometry(0.55, 14, 10);
+    lens.scale(1.0, 1.0, 0.45);
+    lens.translate(cx, cy, cz + eyeR * 0.65);
+    structGeos.push(lens);
+
+    // 4. Retinal Vessel Arbors (Central Retinal Artery & Central Retinal Vein)
+    // 4 primary quadrants: Superior Temporal, Inferior Temporal, Superior Nasal, Inferior Nasal
+    const quadrants = [
+      { dirX: side * 1.0, dirY: 1.0 },
+      { dirX: side * 1.0, dirY: -1.0 },
+      { dirX: -side * 0.8, dirY: 0.9 },
+      { dirX: -side * 0.8, dirY: -0.9 }
+    ];
+
+    for (const q of quadrants) {
+      for (let branch = 0; branch < 3; branch++) {
+        const spread = (branch - 1) * 0.35;
+        const ptsA = [], ptsV = [];
+        for (let step = 0; step <= 8; step++) {
+          const frac = step / 8;
+          const theta = frac * 1.4;
+          const rx = (q.dirX + spread * (1 - frac)) * Math.sin(theta) * eyeR * 0.88;
+          const ry = (q.dirY + spread * frac * 0.5) * Math.sin(theta) * eyeR * 0.88;
+          const rz = -Math.cos(theta) * eyeR * 0.88;
+
+          const px = discX + rx, py = discY + ry, pz = cz + rz;
+          ptsA.push(new THREE.Vector3(px, py, pz));
+          // Vein runs alongside with slight offset
+          ptsV.push(new THREE.Vector3(px + 0.04, py - 0.03, pz + 0.02));
+        }
+        for (let i = 0; i < ptsA.length - 1; i++) {
+          arteryLines.push(ptsA[i].x, ptsA[i].y, ptsA[i].z, ptsA[i + 1].x, ptsA[i + 1].y, ptsA[i + 1].z);
+          veinLines.push(ptsV[i].x, ptsV[i].y, ptsV[i].z, ptsV[i + 1].x, ptsV[i + 1].y, ptsV[i + 1].z);
+        }
+      }
+    }
+
+    // 5. Major Arterial Circle of Iris (Circulus arteriosus iridis) & Radial Iridial Vessels
+    const irisZ = cz + eyeR * 0.82;
+    for (let i = 0; i < 24; i++) {
+      const a0 = (i / 24) * Math.PI * 2, a1 = ((i + 1) / 24) * Math.PI * 2;
+      const rRing = 0.82;
+      arteryLines.push(cx + Math.cos(a0) * rRing, cy + Math.sin(a0) * rRing, irisZ,
+                       cx + Math.cos(a1) * rRing, cy + Math.sin(a1) * rRing, irisZ);
+      arteryLines.push(cx + Math.cos(a0) * rRing, cy + Math.sin(a0) * rRing, irisZ,
+                       cx + Math.cos(a0) * 0.32, cy + Math.sin(a0) * 0.32, irisZ);
+    }
+  }
+
+  const arteryGeo = new THREE.BufferGeometry();
+  arteryGeo.setAttribute("position", new THREE.Float32BufferAttribute(arteryLines, 3));
+  const veinGeo = new THREE.BufferGeometry();
+  veinGeo.setAttribute("position", new THREE.Float32BufferAttribute(veinLines, 3));
+  const structuresGeo = mergeGeos(structGeos);
+
+  return { arteryGeo, veinGeo, structuresGeo };
+}

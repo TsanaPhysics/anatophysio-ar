@@ -18,5 +18,11 @@ export const THORAX_LABELS = [
   { t: "Lumbar spine", layer: "skeleton", jaw: 0, pts: [[0.0, -34.0, -4.6]] },
   { t: "Femur", layer: "skeleton", seg: "thigh", jaw: 0, pts: [[8.6, -58.0, 0.3], [-8.6, -58.0, 0.3]] },
   { t: "Patella", layer: "skeleton", seg: "shin", jaw: 0, pts: [[6.8, -67.0, 1.8], [-6.8, -67.0, 1.8]] },
-  { t: "Tibia & Fibula", layer: "skeleton", seg: "shin", jaw: 0, pts: [[6.5, -78.0, 0.0], [-6.5, -78.0, 0.0]] }
+  { t: "Tibia & Fibula", layer: "skeleton", seg: "shin", jaw: 0, pts: [[6.5, -78.0, 0.0], [-6.5, -78.0, 0.0]] },
+  { t: "Central retinal artery", layer: "eye_vessels", jaw: 0, pts: [[3.2, 2.3, 1.8], [-3.2, 2.3, 1.8]] },
+  { t: "Central retinal vein", layer: "eye_vessels", jaw: 0, pts: [[3.0, 2.1, 1.7], [-3.0, 2.1, 1.7]] },
+  { t: "Optic disc (CN II)", layer: "eye_vessels", jaw: 0, pts: [[2.7, 2.4, 0.9], [-2.7, 2.4, 0.9]] },
+  { t: "Macula & Fovea centralis", layer: "eye_vessels", jaw: 0, pts: [[3.5, 2.3, 1.2], [-3.5, 2.3, 1.2]] },
+  { t: "Iris & Pupil", layer: "eyes", jaw: 0, pts: [[3.1, 2.4, 3.3], [-3.1, 2.4, 3.3]] },
+  { t: "Crystalline lens", layer: "eyes", jaw: 0, pts: [[3.1, 2.4, 3.0], [-3.1, 2.4, 3.0]] }
 ];
