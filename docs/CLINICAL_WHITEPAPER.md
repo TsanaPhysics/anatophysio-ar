@@ -129,3 +129,23 @@ $$\theta_{\text{Cobb}} = \arctan\left(\frac{|\Delta X|}{|\Delta Y|}\right) \time
 * **Audio Synthesizer:** Web Audio API (60-80 Hz sine/exponential envelopes for Lub-Dub heart tones, 440-587 Hz chimes)
 * **Performance:** 60 FPS บนคอมพิวเตอร์และแล็ปท็อปทั่วไป (Zero-GC Loop design)
 
+---
+
+### 5. สถาปัตยกรรม 3 เสาหลักและระบบสมองดิจิทัล (3-Pillar & Digital Brain Architecture)
+
+#### 5.1 การจัดหมวดหมู่ 3 เสาหลักของระบบ (3-Pillar Architecture)
+1. **🩻 หมวดรังสีวิทยาและเอฟเฟกต์เอกซเรย์ (X-Ray & Radiology):**
+   * การจำลองความสว่างฟลูออโรสโคปี (Fluoroscopy Luminescence & Glow Gain)
+   * การผ่าระนาบตัดขวางเสมือน (Virtual Section Slicing & Anatomical Cut Planes)
+   * การปรับสัดส่วนโครงกระดูก (Kinematic Calibration & Metric Fit)
+2. **🫀 หมวดกายวิภาคศาสตร์ (Anatomy & Structural Dissection):**
+   * โครงสร้างกระดูกซี่โครงแบน 12 คู่ (Ribbon-like flat ribs) พร้อมแนวกระดูกสันหลัง T1-T12
+   * หัวใจ 4 ห้อง (4-Chamber Heart) และปอดแยกกลีบตาม situs จริง (Right 3 lobes, Left 2 lobes with cardiac notch)
+   * **สมองมนุษย์พร้อมรอยหยัก (Human Cerebrum with Gyri & Sulci):** การพับม้วนตัวเพิ่มพื้นที่ผิวของ Neocortex พร้อมรอยแยกสมองซีกซ้าย-ขวา (Longitudinal cerebral fissure)
+   * **สมองดิจิทัลและการเรียนรู้เชิงลึก (Digital Brain & Deep Learning AI):** โครงข่ายไซแนปส์จำลอง 160 จุดเชื่อมต่อ 1,791 เส้นใยประสาท พร้อมพัลส์ศักย์งาน (Action potentials) ที่ส่งสัญญาณสัมพันธ์กับการประมวลผล Deep Learning CNN/Transformer
+3. **📈 หมวดสรีรวิทยาและชีวกลศาสตร์ (Physiology & Biosensors):**
+   * วงจรหัวใจ 7 ระยะ (Wiggers Cycle) และคลื่นไฟฟ้าหัวใจ Lead II ECG HUD
+   * การสกัดสัญญาณชีพไร้สัมผัสผ่านสีผิวใบหน้า (Contactless rPPG Pulse Extraction)
+   * การวิเคราะห์ชีวกลศาสตร์กระดูกคอ C1-C7 (Kapandji Load), ภาวะกระดูกสันหลังคด (Cobb Angle), CROM, TMJ, และรายงานตรวจคลินิก PDF
+
+

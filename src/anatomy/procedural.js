@@ -407,3 +407,73 @@ export function buildFullSkeletonGeometry() {
   const { axial, segments } = buildSkeletonParts();
   return mergeGeos([axial, ...Object.values(segments)]);
 }
+
+// ------------------------------ 6. Brain Gyri & Sulci (รอยหยักสมอง) ------------------------------
+export function applyBrainGyriAndSulci(geo) {
+  const pos = geo.attributes.position.array;
+  const cx = -0.04, cy = 6.36, cz = -5.60;
+  for (let i = 0; i < pos.length; i += 3) {
+    const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+    const dx = x - cx, dy = y - cy, dz = z - cz;
+    const dist = Math.hypot(dx, dy, dz);
+    if (dist < 0.1) continue;
+    const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+
+    // Longitudinal fissure cleft along sagittal midline (x = 0)
+    const cleft = -0.95 * Math.exp(-Math.pow(x / 0.85, 2));
+
+    // Multi-harmonic gyral convolutions and sulcal grooves
+    const s1 = Math.sin(1.85 * x + Math.cos(1.65 * y)) * Math.cos(1.75 * z + Math.sin(1.55 * x));
+    const s2 = Math.sin(3.4 * y + Math.sin(2.9 * z)) * Math.cos(3.2 * x);
+    const s3 = Math.sin(5.6 * z) * Math.sin(5.4 * y) * 0.5;
+    const gyri = (s1 * 0.45 + s2 * 0.22 + s3 * 0.10);
+
+    const disp = cleft + gyri;
+    pos[i]     += nx * disp;
+    pos[i + 1] += ny * disp;
+    pos[i + 2] += nz * disp;
+  }
+  geo.attributes.position.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// ------------------------------ 7. Digital Brain & Deep Learning Neural Connectome ------------------------------
+export function buildDigitalBrainConnectome() {
+  const cx = -0.04, cy = 6.36, cz = -5.60;
+  const nodes = [];
+  const rng = (s) => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+  let seed = 1.0;
+  for (let i = 0; i < 160; i++) {
+    const u = rng(seed++) * Math.PI * 2;
+    const v = (rng(seed++) - 0.5) * Math.PI;
+    const r = 0.35 + 0.58 * Math.cbrt(rng(seed++));
+    let x = cx + r * 6.2 * Math.cos(v) * Math.cos(u);
+    const y = cy + r * 6.0 * Math.sin(v) + (v > 0 ? 0.8 : -0.5);
+    const z = cz + r * 7.8 * Math.cos(v) * Math.sin(u);
+    if (Math.abs(x - cx) < 0.6) x += (x >= cx ? 0.6 : -0.6);
+    nodes.push(new THREE.Vector3(x, y, z));
+  }
+
+  const linePositions = [];
+  const lineColors = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const d = nodes[i].distanceTo(nodes[j]);
+      if (d < 4.2) {
+        linePositions.push(nodes[i].x, nodes[i].y, nodes[i].z);
+        linePositions.push(nodes[j].x, nodes[j].y, nodes[j].z);
+        // Neon cyan, electric violet, amber synapse colors
+        const col = (i + j) % 3 === 0 ? [0.0, 0.94, 1.0] : (i + j) % 3 === 1 ? [0.74, 0.0, 1.0] : [1.0, 0.72, 0.0];
+        lineColors.push(...col, ...col);
+      }
+    }
+  }
+
+  const nodesGeo = new THREE.BufferGeometry().setFromPoints(nodes);
+  const axonsGeo = new THREE.BufferGeometry();
+  axonsGeo.setAttribute("position", new THREE.Float32BufferAttribute(linePositions, 3));
+  axonsGeo.setAttribute("color", new THREE.Float32BufferAttribute(lineColors, 3));
+
+  return { nodes, nodesGeo, axonsGeo };
+}

@@ -3,7 +3,8 @@ import { createBodyRig, updateBodyRig, segKey } from "./anatomy/body-rig.js";
 import { ANATOMY_DICT } from "./anatomy/dictionary.js";
 import { THORAX_LABELS } from "./anatomy/thorax-labels.js";
 import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeometry,
-         buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildSkeletonParts, buildFullSkeletonGeometry } from "./anatomy/procedural.js";
+         buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildSkeletonParts, buildFullSkeletonGeometry,
+         applyBrainGyriAndSulci, buildDigitalBrainConnectome } from "./anatomy/procedural.js";
 import { UI_TEXT } from "./ui/i18n.js";
 import { VERT, FRAG } from "./shaders/xray.js";
 import { playSoftChime, playHeartSound, playS1, playS2 } from "./audio/sounds.js";
@@ -69,7 +70,13 @@ function updateUILanguage() {
   setTxt("tab_lbl_ergo", t.tab_ergo);
   setTxt("tab_lbl_look", t.tab_look);
   setTxt("tab_lbl_fit", t.tab_fit);
+  setTxt("tab_lbl_xray", t.tab_xray);
+  setTxt("tab_lbl_anatomy", t.tab_anatomy);
+  setTxt("tab_lbl_physio", t.tab_physio);
   setTxt("ui_lbl_layers_head", t.layers_head);
+  setTxt("ui_brain_ai_head", t.brain_ai_head);
+  setTxt("ui_ck_digital_brain", t.ck_digital_brain);
+  setTxt("ui_ck_deep_learning", t.ck_deep_learning);
   setTxt("ui_ck_skel", t.ck_skel);
   setTxt("ui_ck_ribs", t.ck_ribs);
   setTxt("ui_ck_heart", t.ck_heart);
@@ -131,7 +138,7 @@ function updateUILanguage() {
 
 // ------------------------------ settings ------------------------------
 const DEFAULTS = {
-  skull: true, brain: false, muscles: false, eyes: true, outline: true, hands: true,
+  skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false, eyes: true, outline: true, hands: true,
   ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true,
   bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
@@ -142,11 +149,13 @@ let S = Object.assign({}, DEFAULTS);
 try { Object.assign(S, JSON.parse(localStorage.getItem("xr_settings") || "{}")); } catch (e) {}
 function save() { try { localStorage.setItem("xr_settings", JSON.stringify(S)); } catch (e) {} }
 
-const LAYERS = ["skull", "brain", "muscles", "eyes", "outline", "hands", "ribs", "heart", "lungs", "cartilage", "skeleton"];
+const LAYERS = ["skull", "brain", "digital_brain", "muscles", "eyes", "outline", "hands", "ribs", "heart", "lungs", "cartilage", "skeleton"];
 const SLIDERS = ["bright", "real", "feather", "cut", "fs", "fw", "fh", "fd", "fx", "fy", "fz", "bpm", "resp"];
 
 function syncUI() {
   for (const k of LAYERS) { const el = $("L_" + k); if (el) el.checked = !!S[k]; }
+  if ($("L_deep_learning")) $("L_deep_learning").checked = !!S.deep_learning;
+  if (digitalBrainGroup) digitalBrainGroup.visible = !!S.digital_brain;
   for (const b of $("style").children) b.classList.toggle("on", b.dataset.style === S.style);
   for (const b of $("lang_seg").children) b.classList.toggle("on", b.dataset.lang === S.lang);
   $("ergo_enable").checked = S.ergo;
@@ -169,7 +178,15 @@ function syncUI() {
   updateUILanguage();
   populateAnatomySelect();
 }
-for (const k of LAYERS) { const el = $("L_" + k); if (el) el.onchange = e => { S[k] = e.target.checked; save(); }; }
+for (const k of LAYERS) {
+  const el = $("L_" + k);
+  if (el) el.onchange = e => {
+    S[k] = e.target.checked;
+    if (k === "digital_brain" && digitalBrainGroup) digitalBrainGroup.visible = S[k];
+    save();
+  };
+}
+if ($("L_deep_learning")) $("L_deep_learning").onchange = e => { S.deep_learning = e.target.checked; save(); };
 for (const b of $("style").children) b.onclick = () => { S.style = b.dataset.style; save(); syncUI(); applyStyle(); };
 for (const b of $("lang_seg").children) b.onclick = () => { S.lang = b.dataset.lang; save(); syncUI(); };
 $("ergo_enable").onchange = e => { S.ergo = e.target.checked; save(); };
@@ -198,7 +215,9 @@ for (const b of document.querySelectorAll("[data-preset]")) b.onclick = () => {
   } else if (p === "skull") {
     S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.muscles = false; S.outline = true;
   } else if (p === "brain") {
-    S.skeleton = false; S.ribs = false; S.skull = false; S.eyes = false; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.muscles = false; S.outline = true;
+    S.skeleton = false; S.ribs = false; S.skull = false; S.eyes = false; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.digital_brain = false; S.muscles = false; S.outline = true;
+  } else if (p === "digital_brain") {
+    S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.digital_brain = true; S.deep_learning = true; S.muscles = false; S.outline = true;
   } else if (p === "muscles") {
     S.skeleton = false; S.ribs = false; S.skull = false; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.muscles = true; S.outline = true;
   } else {
@@ -212,6 +231,8 @@ syncUI();
 let THREE, renderer, headScene, handScene, cam, ortho, headGroup, jawPivot, baseProj;
 let heartGroup = null, lungsGroup = null, ribsGroup = null, skelGroup = null;
 let bodyGroup = null, bodyRig = null;
+let digitalBrainGroup = null, digitalBrainLines = null, digitalBrainNodes = null;
+let lastInferMs = 14.5;
 const limbMeshes = {};
 const rppgDetector = new RPPGDetector(6);
 const wiggersCycle = new WiggersCycle();
@@ -242,7 +263,11 @@ function decodeMeshes() {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     geo.setIndex(new THREE.BufferAttribute(new Uint16Array(u8.buffer, m.offI, m.ni).slice(), 1));
-    geo.computeVertexNormals();
+    if (m.name === "cerebrum") {
+      applyBrainGyriAndSulci(geo);
+    } else {
+      geo.computeVertexNormals();
+    }
     out[m.name] = geo;
   }
   return out;
@@ -278,6 +303,26 @@ function buildScene() {
   add("eyes", geos.eyes, "eyes", 0xfff3a8, 0xf4f4ee, 4);
   add("cerebrum", geos.cerebrum, "brain", 0xff9fc0, 0xe2a39d, 5);
   add("hindbrain", geos.hindbrain, "brain", 0xffc37a, 0xd6ad84, 5);
+
+  // Digital Brain Neural Connectome (Synapses & Axon neural pathways)
+  const dBrain = buildDigitalBrainConnectome();
+  const dAxonMat = new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending
+  });
+  digitalBrainLines = new THREE.LineSegments(dBrain.axonsGeo, dAxonMat);
+  digitalBrainLines.matrixAutoUpdate = false; digitalBrainLines.frustumCulled = false;
+
+  const dNodeMat = new THREE.PointsMaterial({
+    color: 0x00f0ff, size: 5, sizeAttenuation: false, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending
+  });
+  digitalBrainNodes = new THREE.Points(dBrain.nodesGeo, dNodeMat);
+  digitalBrainNodes.matrixAutoUpdate = false; digitalBrainNodes.frustumCulled = false;
+
+  digitalBrainGroup = new THREE.Group();
+  digitalBrainGroup.add(digitalBrainLines);
+  digitalBrainGroup.add(digitalBrainNodes);
+  digitalBrainGroup.visible = !!S.digital_brain;
+  headGroup.add(digitalBrainGroup);
 
   // Body group & Rig (Thorax, Viscera, Spine, Pelvis & Limbs)
   bodyGroup = new THREE.Group(); bodyGroup.matrixAutoUpdate = false;
@@ -700,6 +745,40 @@ function drawErgoHUD(g, ergo) {
   g.restore();
 }
 
+function drawDeepLearningHUD(g, now, inferMs) {
+  const boxW = Math.min(230, W * 0.44), boxH = 68;
+  const bx = W - boxW - 14, by = 62;
+  g.save();
+  g.fillStyle = "rgba(8, 14, 26, 0.88)";
+  g.strokeStyle = "rgba(0, 240, 255, 0.45)";
+  g.lineWidth = 1;
+  const r = 8;
+  g.beginPath();
+  g.moveTo(bx + r, by); g.lineTo(bx + boxW - r, by); g.quadraticCurveTo(bx + boxW, by, bx + boxW, by + r);
+  g.lineTo(bx + boxW, by + boxH - r); g.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - r, by + boxH);
+  g.lineTo(bx + r, by + boxH); g.quadraticCurveTo(bx, by + boxH, bx, by + boxH - r);
+  g.lineTo(bx, by + r); g.quadraticCurveTo(bx, by, bx + r, by);
+  g.closePath();
+  g.fill(); g.stroke();
+
+  g.font = "700 11px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#38bdf8";
+  g.textAlign = "left"; g.textBaseline = "top";
+  g.fillText("🧠 DEEP LEARNING AI INFERENCE", bx + 10, by + 8);
+
+  g.font = "500 10px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#94a3b8";
+  g.fillText("Backbone: BlazePose & Face CNN", bx + 10, by + 23);
+  g.fillText("Inference: " + inferMs.toFixed(1) + " ms | Synapses: 1,791", bx + 10, by + 36);
+
+  // Animated synaptic pulse bar
+  const pulseW = (((now / 15) % 100) / 100) * (boxW - 20);
+  g.fillStyle = "rgba(0, 240, 255, 0.18)";
+  g.fillRect(bx + 10, by + 51, boxW - 20, 5);
+  g.fillStyle = "#00f0ff";
+  g.fillRect(bx + 10, by + 51, pulseW, 5);
+  g.restore();
+}
 
 function drawECGHUD(g, wState, rppgRes) {
   if (!S.ecgHud) return;
@@ -856,6 +935,13 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
     }
   }
 
+  // 3. Digital Brain Synaptic Wave Animation
+  if (digitalBrainGroup && digitalBrainGroup.visible) {
+    const t = now / 1000;
+    if (digitalBrainLines) digitalBrainLines.material.opacity = 0.45 + 0.35 * Math.sin(t * 8.0);
+    if (digitalBrainNodes) digitalBrainNodes.material.size = 4.0 + 2.0 * Math.sin(t * 12.0);
+  }
+
   let mask = "none", lens = null;
   if (S.reveal === "lens") {
     const rad = (0.07 + 0.38 * S.cut) * W;
@@ -878,6 +964,7 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
   if (lens) { g.strokeStyle = "rgba(127,209,255,.8)"; g.lineWidth = 2; g.beginPath(); g.arc(lens.x, lens.y, lens.r, 0, 6.3); g.stroke(); }
   if (S.labels) drawLabels(g, lens);
   drawECGHUD(g, wState, rppgLatest);
+  if (S.deep_learning) drawDeepLearningHUD(g, now, lastInferMs);
 
   // Ergonomics computation & HUD overlay
   if (head.found && headGroup.visible) {
@@ -955,6 +1042,7 @@ function liveLoop() {
     lastTime = video.currentTime;
     const now = performance.now();
     let faceLms = null, hands = [], sides = [], poseData = null, rppgLatest = null;
+    const inferStart = performance.now();
     try {
       const fr = faceTracker.detectForVideo(video, now);
       faceLms = fr.faceLandmarks && fr.faceLandmarks[0];
@@ -1005,6 +1093,9 @@ function liveLoop() {
     } catch (e) { say("The tracker hit an error: " + e.message, "bad"); return; }
     const t = UI_TEXT[S.lang] || UI_TEXT.both;
     const bodyStr = poseData ? " + Body" : "";
+    const inferEnd = performance.now();
+    lastInferMs = lastInferMs * 0.85 + (inferEnd - inferStart) * 0.15;
+    if ($("ui_dl_latency")) $("ui_dl_latency").textContent = "~" + lastInferMs.toFixed(1) + " ms (" + Math.round(1000 / Math.max(16, lastInferMs)) + " FPS)";
     say(head.found ? t.status_tracking + (hands.length ? t.status_hands : "") + bodyStr
                    : hands.length ? "Hand found. Face the camera to see inside your body."
                    : "No face found. Face the camera, with light on your face.", head.found || hands.length ? "ok" : "bad");
@@ -1027,6 +1118,8 @@ function demoLoop() {
     const lms = [];
     for (const id of FIT_IDS) { const v = new THREE.Vector3().fromArray(META.fit[id]).applyMatrix4(m).applyMatrix4(baseProj); lms[id] = { x: (v.x + 1) / 2, y: (1 - v.y) / 2, z: 0 }; }
     updateHead(m.elements, lms, 0.5 + 0.5 * Math.sin(time * 1.3));
+    lastInferMs = 13.8 + 2.2 * Math.sin(time * 2.5);
+    if ($("ui_dl_latency")) $("ui_dl_latency").textContent = "~" + lastInferMs.toFixed(1) + " ms (60 FPS)";
     const k = 0.0021 * H / W * (4 / 3), hand = base.map(p => ({ x: 0.2 - (p[0] - cx) * k, y: 0.56 + (p[2] - cz) * k * W / H, z: (p[1] - cy) * k }));
     renderFrame(now, FIT_IDS.map(id => lms[id]), [hand], [true], null);
   }

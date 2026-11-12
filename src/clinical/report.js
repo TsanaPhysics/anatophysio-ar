@@ -146,3 +146,4 @@ export function generateClinicalReport(data) {
   `);
   win.document.close();
 }
+

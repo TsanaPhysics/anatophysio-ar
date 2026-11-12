@@ -146,6 +146,26 @@ export const ANATOMY_DICT = {
     desc: "ศูนย์การประมวลผลภาพและการมองเห็น (Primary visual cortex V1 / Brodmann area 17)",
     clinical: "รอยโรคขาดเลือดจากหลอดเลือด Posterior cerebral artery (PCA) นำไปสู่อาการลานสายตาดับครึ่งซีก (Homonymous hemianopia)"
   },
+  "Cerebral gyri & sulci": {
+    th: "รอยหยักและร่องเปลือกสมอง",
+    en: "Cerebral gyri & sulci",
+    la: "Gyri et sulci cerebri",
+    fma: "FMA:62429",
+    snomed: "279314002",
+    system: "Central Nervous System",
+    desc: "การพับม้วนตัวเพิ่มพื้นที่ผิวของเปลือกสมอง (Neocortex) บรรจุเซลล์ประสาทกว่า 16,000 ล้านเซลล์สำหรับสติปัญญาและการคิดขั้นสูง",
+    clinical: "ภาวะ Lissencephaly (สมองเรียบไร้รอยหยัก) เป็นความผิดปกติแต่กำเนิดที่นำไปสู่พัฒนาการช้าและโรคลมชักรุนแรง"
+  },
+  "Digital Neural Connectome": {
+    th: "สมองดิจิทัลและการเรียนรู้เชิงลึก",
+    en: "Digital Neural AI Connectome",
+    la: "Connectoma neuralis digitalis",
+    fma: "FMA:83648",
+    snomed: "AI-NEURAL-01",
+    system: "Digital Neuro-AI",
+    desc: "แบบจำลองโครงข่ายประสาทเทียมเชิงลึก (Deep Learning Artificial Neural Network) ถอดรหัสคลื่นสมองและการอนุมานภาพแบบเรียลไทม์",
+    clinical: "การผสาน Brain-Computer Interface (BCI) และโครงข่ายประสาทสังเคราะห์ช่วยฟื้นฟูการสั่งการและการสื่อสารของผู้ป่วยอัมพาต"
+  },
   "Cerebellum": {
     th: "สมองน้อย",
     en: "Cerebellum",

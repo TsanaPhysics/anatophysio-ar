@@ -24,6 +24,7 @@
           <button data-preset="lungs" id="qp_lungs">🫁 Lungs</button>
           <button data-preset="skull" id="qp_skull">🩻 Skull</button>
           <button data-preset="brain" id="qp_brain">🧠 Brain</button>
+          <button data-preset="digital_brain" id="qp_digital_brain">⚡ AI Brain</button>
           <button data-preset="muscles" id="qp_muscles">💪 Muscles</button>
           <button data-preset="all" id="qp_all">✨ All</button>
         </div>
@@ -60,19 +61,60 @@
 
     <div class="status-bar" id="status">กดปุ่มเปิดกล้อง แล้วอนุญาตการเข้าถึงเว็บแคม</div>
 
-    <!-- Category Tabs Navigation -->
+    <!-- 3-Pillar Category Tabs Navigation -->
     <div class="nav-tabs" id="nav_tabs">
-      <button class="nav-tab active" data-tab="tab_layers"><span class="icon">🩻</span><span id="tab_lbl_layers">กายวิภาค</span></button>
-      <button class="nav-tab" data-tab="tab_cardiac"><span class="icon">🫀</span><span id="tab_lbl_cardiac">หัวใจ/ปอด</span></button>
-      <button class="nav-tab" data-tab="tab_ergo"><span class="icon">📐</span><span id="tab_lbl_ergo">สรีรศาสตร์</span></button>
-      <button class="nav-tab" data-tab="tab_look"><span class="icon">🎛️</span><span id="tab_lbl_look">เอฟเฟกต์</span></button>
-      <button class="nav-tab" data-tab="tab_fit"><span class="icon">🔧</span><span id="tab_lbl_fit">ปรับขนาด</span></button>
+      <button class="nav-tab active" data-tab="tab_xray"><span class="icon">🩻</span><span id="tab_lbl_xray">1. เอกซเรย์</span></button>
+      <button class="nav-tab" data-tab="tab_anatomy"><span class="icon">🫀</span><span id="tab_lbl_anatomy">2. กายวิภาค</span></button>
+      <button class="nav-tab" data-tab="tab_physio"><span class="icon">📈</span><span id="tab_lbl_physio">3. สรีรวิทยา</span></button>
     </div>
 
     <!-- Tab Contents Container -->
     <div class="tab-content">
-      <!-- 1. Layers Tab -->
-      <div class="tab-pane active" id="tab_layers">
+      <!-- 1. X-Ray Mode Tab -->
+      <div class="tab-pane active" id="tab_xray">
+        <!-- Mixed Reality & X-Ray Beam Card -->
+        <div class="card">
+          <div class="card-head" id="ui_mr_head">ผสานโลกจริง & แสงเรือง (MIXED REALITY & X-RAY)</div>
+          <div class="row"><label for="bright" id="ui_lbl_bright">ความสว่างเรืองแสง</label><input id="bright" type="range" min="0.3" max="2.2" step="0.01"></div>
+          <div class="row"><label for="real" id="ui_lbl_real">มองเห็นใบหน้าจริง</label><input id="real" type="range" min="0" max="1" step="0.01"></div>
+          <div class="row"><label for="feather" id="ui_lbl_feather">ความนุ่มขอบ <b id="featherv"></b></label><input id="feather" type="range" min="0" max="1" step="0.01"></div>
+          <div class="row">
+            <label for="reveal" id="ui_lbl_reveal">โหมดผ่าดู</label>
+            <select id="reveal">
+              <option value="whole" id="ui_opt_whole">ทั้งร่างกาย (Whole)</option>
+              <option value="left" id="ui_opt_left">ผ่าดูซีกซ้าย (Left)</option>
+              <option value="right" id="ui_opt_right">ผ่าดูซีกขวา (Right)</option>
+              <option value="top" id="ui_opt_top">ส่วนบนศีรษะ (Top)</option>
+              <option value="bottom" id="ui_opt_bottom">ส่วนอกและลำตัว (Chest)</option>
+              <option value="lens" id="ui_opt_lens">ไฟฉายตามนิ้ว (Lens)</option>
+            </select>
+          </div>
+          <div class="row" id="cutrow"><label for="cut" id="cutlabel">ตำแหน่งระนาบตัด</label><input id="cut" type="range" min="0" max="1" step="0.005"></div>
+        </div>
+
+        <!-- Skeleton Calibration & Fit Card -->
+        <div class="card">
+          <div class="card-head" id="ui_fit_head">ปรับสัดส่วนโครงกระดูก (CALIBRATION)</div>
+          <div class="row"><label for="fs" id="ui_lbl_fs">ขนาดรวม <b id="fsv"></b></label><input id="fs" type="range" min="0.7" max="1.4" step="0.005"></div>
+          <div class="row"><label for="fw" id="ui_lbl_fw">ความกว้าง <b id="fwv"></b></label><input id="fw" type="range" min="0.8" max="1.25" step="0.005"></div>
+          <div class="row"><label for="fh" id="ui_lbl_fh">ความสูง <b id="fhv"></b></label><input id="fh" type="range" min="0.8" max="1.25" step="0.005"></div>
+          <div class="row"><label for="fd" id="ui_lbl_fd">ความลึก <b id="fdv"></b></label><input id="fd" type="range" min="0.8" max="1.25" step="0.005"></div>
+          <div class="row"><label for="fx" id="ui_lbl_fx">ซ้าย/ขวา <b id="fxv"></b></label><input id="fx" type="range" min="-3" max="3" step="0.1"></div>
+          <div class="row"><label for="fy" id="ui_lbl_fy">ขึ้น/ลง <b id="fyv"></b></label><input id="fy" type="range" min="-4" max="4" step="0.1"></div>
+          <div class="row"><label for="fz" id="ui_lbl_fz">หน้า/หลัง <b id="fzv"></b></label><input id="fz" type="range" min="-4" max="4" step="0.1"></div>
+          <div style="margin-top:8px"><button class="linkbtn" id="fitreset" type="button">รีเซ็ตขนาดเดิม (Reset Fit)</button></div>
+        </div>
+
+        <!-- Real-time Telemetry Data Card -->
+        <div class="card">
+          <label class="ck" style="font-weight:600"><input type="checkbox" id="showdata"><span id="ui_ck_data">แสดงข้อมูล Real-time Telemetry</span></label>
+          <pre id="data" hidden style="margin-top:8px"></pre>
+        </div>
+      </div>
+
+      <!-- 2. Anatomy Mode Tab -->
+      <div class="tab-pane" id="tab_anatomy">
+        <!-- Anatomical Layers Card -->
         <div class="card">
           <div class="card-head" id="ui_lbl_layers_head">ชั้นกายวิภาค (ANATOMICAL LAYERS)</div>
           <div class="grid-2">
@@ -83,7 +125,6 @@
             <label class="ck"><input type="checkbox" id="L_cartilage" checked><i style="background:#88ddff"></i><span id="ui_ck_cart">กระดูกอ่อนซี่โครง</span></label>
             <label class="ck"><input type="checkbox" id="L_hands" checked><i style="background:#d9f0ff"></i><span id="ui_ck_hands">กระดูกมือ</span></label>
             <label class="ck"><input type="checkbox" id="L_skull" checked><i style="background:#bfe3ff"></i><span id="ui_ck_skull">กะโหลกศีรษะ</span></label>
-            <label class="ck"><input type="checkbox" id="L_brain"><i style="background:#ff9fc0"></i><span id="ui_ck_brain">สมอง</span></label>
             <label class="ck"><input type="checkbox" id="L_muscles"><i style="background:#ff6b5e"></i><span id="ui_ck_muscles">กล้ามเนื้อ</span></label>
             <label class="ck"><input type="checkbox" id="L_eyes" checked><i style="background:#fff3a8"></i><span id="ui_ck_eyes">ดวงตา</span></label>
             <label class="ck"><input type="checkbox" id="L_outline" checked><i style="background:#6fb6ff"></i><span id="ui_ck_outline">โครงร่างใบหน้า</span></label>
@@ -98,10 +139,35 @@
             </select>
           </div>
         </div>
+
+        <!-- Human Brain Gyri & Digital AI Neural Connectome Card -->
+        <div class="card" style="border-color: rgba(0,240,255,0.3); background: linear-gradient(180deg, #0b1120 0%, #080d1a 100%);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+            <div class="card-head" id="ui_brain_ai_head" style="color:#38bdf8; margin:0">สมองมนุษย์และปัญญาประดิษฐ์ (BRAIN & DEEP LEARNING)</div>
+            <span style="font-size:10px; padding:2px 6px; border-radius:4px; background:rgba(0,240,255,0.15); color:#38bdf8; font-weight:700">AI NEURAL</span>
+          </div>
+          <div class="checks" style="display:flex; flex-direction:column; gap:8px">
+            <label class="ck"><input type="checkbox" id="L_brain"><i style="background:#ff9fc0"></i><span id="ui_ck_brain">สมองมนุษย์พร้อมรอยหยัก (Gyri & Sulci)</span></label>
+            <label class="ck"><input type="checkbox" id="L_digital_brain" checked><i style="background:#00f0ff"></i><span id="ui_ck_digital_brain">🧠 สมองดิจิทัล (Digital Neural Connectome)</span></label>
+            <label class="ck"><input type="checkbox" id="L_deep_learning" checked><i style="background:#bd00ff"></i><span id="ui_ck_deep_learning">⚡ โครงข่ายการเรียนรู้เชิงลึก (Deep Learning Synapses)</span></label>
+          </div>
+          <div style="margin-top:10px; padding:8px 10px; background:rgba(15,23,42,0.8); border:1px solid rgba(56,189,248,0.2); border-radius:6px; font-size:11px; color:#94a3b8">
+            <div style="display:flex; justify-content:space-between; margin-bottom:3px">
+              <span>Backbone Architecture:</span> <b style="color:#38bdf8">MediaPipe Vision CNN/Trans.</b>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:3px">
+              <span>Deep Inference Latency:</span> <b id="ui_dl_latency" style="color:#4ade80">~14.5 ms (60 FPS)</b>
+            </div>
+            <div style="display:flex; justify-content:space-between">
+              <span>Synaptic Axon Pathways:</span> <b style="color:#facc15">1,791 connections</b>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- 2. Cardio & Respiration Tab -->
-      <div class="tab-pane" id="tab_cardiac">
+      <!-- 3. Physiology Mode Tab -->
+      <div class="tab-pane" id="tab_physio">
+        <!-- Cardio-Respiratory Card -->
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
             <div class="card-head" id="ui_cardiac_head">ระบบหัวใจและการหายใจ</div>
@@ -126,10 +192,8 @@
             <label class="ck"><input type="checkbox" id="ecg_hud" checked><span id="ui_ck_ecg">คลื่นหัวใจ Lead II (ECG HUD)</span></label>
           </div>
         </div>
-      </div>
 
-      <!-- 3. Ergonomics Tab -->
-      <div class="tab-pane" id="tab_ergo">
+        <!-- Biomechanics & Ergonomics Card -->
         <div class="card">
           <div class="card-head" id="ui_ergo_head">สรีรศาสตร์และภาระกระดูกคอ C1-C7</div>
           <div class="checks" style="margin-bottom:8px">
@@ -167,48 +231,6 @@
               <span>📋</span> <span id="ui_btn_report">พิมพ์รายงานตรวจคัดกรองคลินิก (PDF Report)</span>
             </button>
           </div>
-        </div>
-      </div>
-
-      <!-- 4. Look & Mixed Reality Tab -->
-      <div class="tab-pane" id="tab_look">
-        <div class="card">
-          <div class="card-head" id="ui_mr_head">ผสานโลกจริง & แสงเรือง (MIXED REALITY)</div>
-          <div class="row"><label for="bright" id="ui_lbl_bright">ความสว่างเรืองแสง</label><input id="bright" type="range" min="0.3" max="2.2" step="0.01"></div>
-          <div class="row"><label for="real" id="ui_lbl_real">มองเห็นใบหน้าจริง</label><input id="real" type="range" min="0" max="1" step="0.01"></div>
-          <div class="row"><label for="feather" id="ui_lbl_feather">ความนุ่มขอบ <b id="featherv"></b></label><input id="feather" type="range" min="0" max="1" step="0.01"></div>
-          <div class="row">
-            <label for="reveal" id="ui_lbl_reveal">โหมดผ่าดู</label>
-            <select id="reveal">
-              <option value="whole" id="ui_opt_whole">ทั้งร่างกาย (Whole)</option>
-              <option value="left" id="ui_opt_left">ผ่าดูซีกซ้าย (Left)</option>
-              <option value="right" id="ui_opt_right">ผ่าดูซีกขวา (Right)</option>
-              <option value="top" id="ui_opt_top">ส่วนบนศีรษะ (Top)</option>
-              <option value="bottom" id="ui_opt_bottom">ส่วนอกและลำตัว (Chest)</option>
-              <option value="lens" id="ui_opt_lens">ไฟฉายตามนิ้ว (Lens)</option>
-            </select>
-          </div>
-          <div class="row" id="cutrow"><label for="cut" id="cutlabel">ตำแหน่งระนาบตัด</label><input id="cut" type="range" min="0" max="1" step="0.005"></div>
-        </div>
-      </div>
-
-      <!-- 5. Fit & Telemetry Tab -->
-      <div class="tab-pane" id="tab_fit">
-        <div class="card">
-          <div class="card-head" id="ui_fit_head">ปรับสัดส่วนโครงกระดูก (CALIBRATION)</div>
-          <div class="row"><label for="fs" id="ui_lbl_fs">ขนาดรวม <b id="fsv"></b></label><input id="fs" type="range" min="0.7" max="1.4" step="0.005"></div>
-          <div class="row"><label for="fw" id="ui_lbl_fw">ความกว้าง <b id="fwv"></b></label><input id="fw" type="range" min="0.8" max="1.25" step="0.005"></div>
-          <div class="row"><label for="fh" id="ui_lbl_fh">ความสูง <b id="fhv"></b></label><input id="fh" type="range" min="0.8" max="1.25" step="0.005"></div>
-          <div class="row"><label for="fd" id="ui_lbl_fd">ความลึก <b id="fdv"></b></label><input id="fd" type="range" min="0.8" max="1.25" step="0.005"></div>
-          <div class="row"><label for="fx" id="ui_lbl_fx">ซ้าย/ขวา <b id="fxv"></b></label><input id="fx" type="range" min="-3" max="3" step="0.1"></div>
-          <div class="row"><label for="fy" id="ui_lbl_fy">ขึ้น/ลง <b id="fyv"></b></label><input id="fy" type="range" min="-4" max="4" step="0.1"></div>
-          <div class="row"><label for="fz" id="ui_lbl_fz">หน้า/หลัง <b id="fzv"></b></label><input id="fz" type="range" min="-4" max="4" step="0.1"></div>
-          <div style="margin-top:8px"><button class="linkbtn" id="fitreset" type="button">รีเซ็ตขนาดเดิม (Reset Fit)</button></div>
-        </div>
-
-        <div class="card">
-          <label class="ck" style="font-weight:600"><input type="checkbox" id="showdata"><span id="ui_ck_data">แสดงข้อมูล Real-time Telemetry</span></label>
-          <pre id="data" hidden style="margin-top:8px"></pre>
         </div>
       </div>
     </div>
