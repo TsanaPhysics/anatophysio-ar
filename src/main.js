@@ -22,6 +22,14 @@ const DEMO = location.hash === "#demo";
 // Anatomy assets (extracted from the monolithic HTML in Phase 1)
 const ASSET_BASE = new URL("../assets/models/", import.meta.url);
 let META, MESH_BUFFER;
+
+// ------------------------------ 3D scene & variables ------------------------------
+let THREE, renderer, headScene, handScene, cam, ortho, headGroup, jawPivot, baseProj;
+let heartGroup = null, lungsGroup = null, ribsGroup = null, skelGroup = null;
+let bodyGroup = null, bodyRig = null;
+let digitalBrainGroup = null, digitalBrainLines = null, digitalBrainNodes = null;
+let eyeVasculatureGroup = null, eyeArteryLines = null, eyeVeinLines = null;
+let lastInferMs = 14.5;
 try {
   const [metaRes, binRes] = await Promise.all([
     fetch(new URL("anatomy.meta.json", ASSET_BASE)),
@@ -244,21 +252,15 @@ for (const b of document.querySelectorAll("[data-preset]")) b.onclick = () => {
 syncUI();
 
 // ------------------------------ 3D scene ------------------------------
-let THREE, renderer, headScene, handScene, cam, ortho, headGroup, jawPivot, baseProj;
-let heartGroup = null, lungsGroup = null, ribsGroup = null, skelGroup = null;
-let bodyGroup = null, bodyRig = null;
-let digitalBrainGroup = null, digitalBrainLines = null, digitalBrainNodes = null;
-let eyeVasculatureGroup = null, eyeArteryLines = null, eyeVeinLines = null;
-let lastInferMs = 14.5;
 const limbMeshes = {};
 const rppgDetector = new RPPGDetector(6);
 const wiggersCycle = new WiggersCycle();
 const ecgHistory = [];
-let lastEcgPush = 0;
-let W = 640, H = 480;
 const meshes = {};
 const handRigs = [];
 const BONES = [[1,2],[2,3],[3,4],[5,6],[6,7],[7,8],[9,10],[10,11],[11,12],[13,14],[14,15],[15,16],[17,18],[18,19],[19,20]];
+let lastEcgPush = 0;
+let W = 640, H = 480;
 
 
 function makeMat(xray, solid, mode) {
