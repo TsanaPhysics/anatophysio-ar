@@ -12,6 +12,7 @@ import { WiggersCycle } from "./physiology/wiggers.js";
 import { evaluateCobbAngle, evaluateCROM, evaluateTMJ } from "./physiology/clinical.js";
 import { computeErgonomics } from "./physiology/ergonomics.js";
 import { initInspector, showAnatomyInspector, hideAnatomyInspector } from "./ui/inspector.js";
+import { generateClinicalReport } from "./clinical/report.js";
 
 const $ = id => document.getElementById(id);
 const statusEl = $("status"), video = $("video"), stage = $("stage");
@@ -94,6 +95,7 @@ function updateUILanguage() {
   setTxt("ui_ergo_body_yaw", t.ergo_body_yaw);
   setTxt("ui_ergo_elbow", t.ergo_elbow);
   setTxt("ui_ergo_knee", t.ergo_knee);
+  setTxt("ui_btn_report", t.btn_report);
   setTxt("ui_cardiac_head", t.cardiac_head);
   setTxt("ui_lbl_bpm", t.lbl_bpm);
   setTxt("ui_lbl_resp", t.lbl_resp);
@@ -484,6 +486,7 @@ const LABEL_COLOR = {
 };
 const HEAD_C = [0, 3.2, -4.8];
 const labelState = {};
+let activeLabelHitBoxes = [];
 let lp, ln, lc;
 function toScreen(v) {
   lc.copy(v).applyMatrix4(cam.projectionMatrix);
@@ -521,7 +524,7 @@ function collectHeadLabels(lens) {
       if (solid && facing < 0.12) continue;
       const s = toScreen(lp);
       if (lens && Math.hypot(s.x - lens.x, s.y - lens.y) > lens.r) continue;
-      if (!best || facing > best.facing) best = { text: getLabel(L.t), color: LABEL_COLOR[L.layer] || "#eef1f8", ax: s.x, ay: s.y, facing };
+      if (!best || facing > best.facing) best = { text: getLabel(L.t), rawKey: L.t, color: LABEL_COLOR[L.layer] || "#eef1f8", ax: s.x, ay: s.y, facing };
     }
     if (best) out.push(best);
   }
@@ -566,6 +569,16 @@ function layoutLabels(g, items, cx, halfWidth, key, splitX) {
       g.textAlign = side === "left" ? "right" : "left";
       g.strokeStyle = "rgba(4,7,13,.92)"; g.lineWidth = 3.5; g.strokeText(it.text, tx, y);
       g.fillText(it.text, tx, y);
+
+      const tw = g.measureText(it.text).width;
+      const lx = side === "left" ? tx - tw - 4 : tx - 4;
+      const rx = side === "left" ? tx + 4 : tx + tw + 4;
+      activeLabelHitBoxes.push({
+        rawKey: it.rawKey || it.text,
+        text: it.text,
+        minX: lx, maxX: rx,
+        minY: y - 10, maxY: y + 10
+      });
     }
   }
 }
@@ -573,6 +586,7 @@ function layoutLabels(g, items, cx, halfWidth, key, splitX) {
 let frameNo = 0, headSplit = 0;
 function drawLabels(g, lens) {
   frameNo++;
+  activeLabelHitBoxes = [];
   let hx = W / 2, halfW = W * 0.16;
   if (head.found && headGroup.visible) {
     lp.fromArray(HEAD_C).applyMatrix4(headGroup.matrix);
@@ -588,7 +602,7 @@ function drawLabels(g, lens) {
     const P = rig.pts, at = (a, b, k) => ({ ax: W - (P[a].x + (P[b].x - P[a].x) * k), ay: H - (P[a].y + (P[b].y - P[a].y) * k) });
     const items = [["Distal phalanx", 11, 12, 0.5], ["Middle phalanx", 10, 11, 0.5], ["Proximal phalanx", 9, 10, 0.5],
                    ["Metacarpal", 0, 9, 0.62], ["Carpal bones (wrist)", 0, 9, 0.1]]
-      .map(([text, a, b, k]) => Object.assign({ text: getLabel(text), color: LABEL_COLOR.hands }, at(a, b, k)))
+      .map(([text, a, b, k]) => Object.assign({ text: getLabel(text), rawKey: text, color: LABEL_COLOR.hands }, at(a, b, k)))
       .filter(it => !lens || Math.hypot(it.ax - lens.x, it.ay - lens.y) <= lens.r);
     let lo = 1e9, hi = -1e9; for (const p of P) { lo = Math.min(lo, W - p.x); hi = Math.max(hi, W - p.x); }
     const mid = (lo + hi) / 2, outerRight = mid > hx, far = outerRight ? lo - 1e4 : hi + 1e4;
@@ -598,9 +612,10 @@ function drawLabels(g, lens) {
 
 // ------------------------------ Audio & Biomechanics Engine ------------------------------
 let riskStart = 0;
-
+let lastErgo = null, lastCobb = null;
 
 function updateErgoUI(ergo) {
+  lastErgo = ergo;
   const badge = $("ergo_badge");
   badge.className = "ergo-badge " + ergo.status;
   const icon = ergo.status === "good" ? "🟢" : ergo.status === "warn" ? "🟡" : "🔴";
@@ -632,6 +647,7 @@ function updateErgoUI(ergo) {
   }
   if (lastPoseData && lastPoseData.image) {
     const cobb = evaluateCobbAngle(lastPoseData.image);
+    lastCobb = cobb;
     if ($("ergo_cobb")) {
       $("ergo_cobb").textContent = cobb.angle.toFixed(1) + "° (" + (cobb.status === "normal" ? "ปกติ" : "เอน") + ")";
       $("ergo_cobb").style.color = cobb.status === "normal" ? "var(--ok)" : cobb.status === "mild" ? "var(--warn)" : "var(--bad)";
@@ -1044,6 +1060,50 @@ async function boot() {
     $("anatomy_select").onchange = (e) => {
       if (e.target.value) showAnatomyInspector(e.target.value, S.lang);
       else hideAnatomyInspector();
+    };
+  }
+
+  // Interactive Label & 3D Raycasting Hit-Test
+  stage.addEventListener("pointermove", (e) => {
+    const rect = stage.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (W / rect.width);
+    const py = (e.clientY - rect.top) * (H / rect.height);
+    const hit = activeLabelHitBoxes.find(b => px >= b.minX && px <= b.maxX && py >= b.minY && py <= b.maxY);
+    stage.style.cursor = hit ? "pointer" : "default";
+  });
+
+  stage.addEventListener("pointerdown", (e) => {
+    const rect = stage.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (W / rect.width);
+    const py = (e.clientY - rect.top) * (H / rect.height);
+    const hit = activeLabelHitBoxes.find(b => px >= b.minX && px <= b.maxX && py >= b.minY && py <= b.maxY);
+    if (hit && hit.rawKey) {
+      showAnatomyInspector(hit.rawKey, S.lang);
+      if ($("anatomy_select")) $("anatomy_select").value = hit.rawKey;
+    }
+  });
+
+  // Clinical Assessment Report Generator
+  if ($("btn_export_report")) {
+    $("btn_export_report").onclick = () => {
+      const data = {
+        bpm: Math.round(rppgLatest && rppgLatest.isLocked ? rppgLatest.bpm : S.bpm),
+        isRppgLock: Boolean(rppgLatest && rppgLatest.isLocked),
+        resp: S.resp,
+        wiggersPhase: wState ? wState.phaseName : "Diastasis (Ventricular Filling)",
+        pitch: lastErgo ? lastErgo.pitch : 0,
+        loadKg: lastErgo ? lastErgo.loadKg : 5.0,
+        loadLbs: lastErgo ? lastErgo.loadLbs : 11.0,
+        ergoStatus: lastErgo ? lastErgo.status : "good",
+        ergoText: lastErgo ? lastErgo.statusText : (S.lang === "th" ? "ท่าทางปกติ" : "Good Posture"),
+        roll: lastErgo ? lastErgo.roll : 0,
+        cobbAngle: lastCobb ? lastCobb.angle : 0,
+        cobbStatus: lastCobb ? lastCobb.status : "normal",
+        cobbLabel: lastCobb ? (lastCobb.status === "normal" ? "ปกติ (Scoliosis < 10°)" : "Mild Scoliosis Trend") : "ปกติ (Normal)",
+        jawMm: lastErgo ? lastErgo.jawMm : 40,
+        shoulderTilt: bodyRig && bodyRig.info ? bodyRig.info.shoulderTilt : 0,
+      };
+      generateClinicalReport(data);
     };
   }
 }

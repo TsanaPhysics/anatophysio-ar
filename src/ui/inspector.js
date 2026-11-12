@@ -57,3 +57,4 @@ export function hideAnatomyInspector() {
 export function getCurrentInspectedKey() {
   return currentKey;
 }
+

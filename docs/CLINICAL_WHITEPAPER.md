@@ -128,3 +128,4 @@ $$\theta_{\text{Cobb}} = \arctan\left(\frac{|\Delta X|}{|\Delta Y|}\right) \time
 * **AI Computer Vision:** Google MediaPipe Tasks Vision (`FaceLandmarker`, `HandLandmarker`, `PoseLandmarker`)
 * **Audio Synthesizer:** Web Audio API (60-80 Hz sine/exponential envelopes for Lub-Dub heart tones, 440-587 Hz chimes)
 * **Performance:** 60 FPS บนคอมพิวเตอร์และแล็ปท็อปทั่วไป (Zero-GC Loop design)
+

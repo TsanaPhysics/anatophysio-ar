@@ -72,7 +72,8 @@ export const UI_TEXT = {
     lbl_fy: "ขึ้น/ลง",
     lbl_fz: "หน้า/หลัง",
     fit_reset: "รีเซ็ตขนาดเดิม (Reset Fit)",
-    ck_data: "แสดงข้อมูล Real-time Telemetry"
+    ck_data: "แสดงข้อมูล Real-time Telemetry",
+    btn_report: "พิมพ์รายงานตรวจคัดกรองคลินิก (PDF Report)"
   },
   en: {
     title: "AnatoPhysio AR (Medical Anatomy & Physiology Mirror)",
@@ -141,7 +142,8 @@ export const UI_TEXT = {
     lbl_fy: "Up / down",
     lbl_fz: "Forward / back",
     fit_reset: "Reset fit",
-    ck_data: "Show telemetry data"
+    ck_data: "Show telemetry data",
+    btn_report: "Export Clinical Screening Report (PDF)"
   },
   both: {
     title: "AnatoPhysio AR (กระจกส่องตรวจกายวิภาคและสรีรวิทยา)",
@@ -215,6 +217,7 @@ export const UI_TEXT = {
     lbl_fy: "ขึ้น / ลง",
     lbl_fz: "หน้า / หลัง",
     fit_reset: "รีเซ็ตขนาดเดิม (Reset Fit)",
-    ck_data: "แสดงข้อมูล Real-time Telemetry"
+    ck_data: "แสดงข้อมูล Real-time Telemetry",
+    btn_report: "พิมพ์รายงานคลินิก (Clinical Report PDF)"
   }
 };
