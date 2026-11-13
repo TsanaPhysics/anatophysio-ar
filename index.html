@@ -268,7 +268,30 @@
             <div><span id="ui_ergo_elbow">ข้อศอก (L/R):</span> <b id="ergo_elbow">-</b></div>
             <div><span id="ui_ergo_knee">ข้อเข่า (L/R):</span> <b id="ergo_knee">-</b></div>
           </div>
-          <div style="margin-top:14px; text-align:center">
+        </div>
+
+        <!-- Preliminary Clinical Health Screening Card -->
+        <div class="card" id="screening_card" style="border-color:rgba(14,165,233,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="card-head" id="ui_screen_head" style="margin:0; color:#38bdf8;">🩺 คัดกรองสุขภาพเบื้องต้น (TRIAGE)</div>
+            <b id="screen_score" style="font-size:12px; color:#4ade80;">100/100</b>
+          </div>
+          <div class="ergo-badge good" id="screen_badge" style="margin-bottom:8px;">🟢 ปกติ (Normal Screening)</div>
+          <div class="ergo-metrics-grid" style="font-size:11.5px;">
+            <div><span>HRV (RMSSD):</span> <b id="screen_hrv">- ms</b></div>
+            <div><span>Stress/Rhythm:</span> <b id="screen_stress">-</b></div>
+            <div><span>Camera RR:</span> <b id="screen_rr">- /min</b></div>
+            <div><span>Facial Sym:</span> <b id="screen_face">100%</b></div>
+            <div><span>Signal SQI:</span> <b id="screen_sqi">- %</b></div>
+            <div><span>TMJ (mm):</span> <b id="screen_tmj">-</b></div>
+          </div>
+          <div id="screen_recom" style="margin-top:8px; padding:7px 9px; background:rgba(15,23,42,0.75); border:1px solid rgba(148,163,184,0.2); border-radius:6px; font-size:11px; color:#cbd5e1; line-height:1.45;">
+            กำลังวิเคราะห์สัญญาณชีพและท่าทาง...
+          </div>
+          <div style="margin-top:6px; font-size:10px; color:#94a3b8; line-height:1.35;" id="ui_screen_disclaimer">
+            ⚠️ ผลคัดกรองเบื้องต้นเพื่อการเฝ้าระวังเท่านั้น ไม่ใช่การวินิจฉัยโรคแทนแพทย์
+          </div>
+          <div style="margin-top:10px; text-align:center">
             <button id="btn_export_report" type="button" style="width:100%; padding:10px 12px; background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; border:0; border-radius:8px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(2,132,199,0.3); display:flex; align-items:center; justify-content:center; gap:8px;">
               <span>📋</span> <span id="ui_btn_report">พิมพ์รายงานตรวจคัดกรองคลินิก (PDF Report)</span>
             </button>

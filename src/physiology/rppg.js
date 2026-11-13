@@ -16,6 +16,11 @@ export class RPPGDetector {
     this.ctx = this.canvas.getContext("2d", { willReadFrequently: true });
     this.minBpm = 45;
     this.maxBpm = 180;
+    this.rmssd = 0;
+    this.sdnn = 0;
+    this.sqi = 0;
+    this.stressLevel = "Normal";
+    this.irregularFlag = false;
   }
 
   // Extract average green intensity from forehead ROI
@@ -23,7 +28,12 @@ export class RPPGDetector {
   processFrame(video, faceLandmarks, now) {
     if (!faceLandmarks || !video || video.readyState < 2) {
       this.confidence = Math.max(0, this.confidence - 0.05);
-      return { bpm: this.bpm, pulse: 0, confidence: this.confidence };
+      this.sqi = Math.round(this.confidence * 100);
+      return {
+        bpm: this.bpm, pulse: 0, confidence: this.confidence,
+        sqi: this.sqi, rmssd: this.rmssd, sdnn: this.sdnn,
+        stressLevel: this.stressLevel, irregularFlag: this.irregularFlag
+      };
     }
 
     // Forehead ROI landmarks (indices around points 10, 151, 67, 297, 109, 338)
@@ -87,7 +97,12 @@ export class RPPGDetector {
     return {
       bpm: this.bpm,
       pulse: this.pulseWave,
-      confidence: this.confidence
+      confidence: this.confidence,
+      sqi: this.sqi,
+      rmssd: this.rmssd,
+      sdnn: this.sdnn,
+      stressLevel: this.stressLevel,
+      irregularFlag: this.irregularFlag
     };
   }
 
@@ -146,10 +161,56 @@ export class RPPGDetector {
         // Smooth adaptive update
         this.bpm = this.bpm * 0.8 + detectedBpm * 0.2;
         this.confidence = Math.min(1.0, this.confidence + 0.12);
+        this._computeHRV(values, fs);
+        this.sqi = Math.round(this.confidence * 100);
         return;
       }
     }
     this.confidence = Math.max(0.1, this.confidence - 0.05);
+    this.sqi = Math.round(this.confidence * 100);
+  }
+
+  // Extract systolic peaks and compute HRV (RMSSD, SDNN), Stress Level & Rhythm Regularity
+  _computeHRV(values, fs) {
+    const N = values.length;
+    const minPeakDist = Math.max(4, Math.round(fs * 0.34)); // >= 340 ms refractory
+    const peaks = [];
+    for (let i = 2; i < N - 2; i++) {
+      if (values[i] > 0 && values[i] > values[i - 1] && values[i] >= values[i + 1] && values[i] > values[i - 2]) {
+        if (peaks.length === 0 || (i - peaks[peaks.length - 1]) >= minPeakDist) {
+          peaks.push(i);
+        }
+      }
+    }
+    if (peaks.length < 4) return;
+
+    const ibis = [];
+    for (let i = 1; i < peaks.length; i++) {
+      const ibiMs = ((peaks[i] - peaks[i - 1]) / fs) * 1000;
+      if (ibiMs >= 333 && ibiMs <= 1333) ibis.push(ibiMs);
+    }
+    if (ibis.length < 3) return;
+
+    let meanIbi = 0;
+    for (let i = 0; i < ibis.length; i++) meanIbi += ibis[i];
+    meanIbi /= ibis.length;
+
+    let varSum = 0, diffSqSum = 0, largeDiffCount = 0;
+    for (let i = 0; i < ibis.length; i++) {
+      varSum += (ibis[i] - meanIbi) * (ibis[i] - meanIbi);
+      if (i > 0) {
+        const d = ibis[i] - ibis[i - 1];
+        diffSqSum += d * d;
+        if (Math.abs(d) / meanIbi > 0.20) largeDiffCount++;
+      }
+    }
+
+    const sdnn = Math.sqrt(varSum / ibis.length);
+    const rmssd = Math.sqrt(diffSqSum / (ibis.length - 1));
+    this.sdnn = Math.round(this.sdnn ? (this.sdnn * 0.7 + sdnn * 0.3) : sdnn);
+    this.rmssd = Math.round(this.rmssd ? (this.rmssd * 0.7 + rmssd * 0.3) : rmssd);
+    this.irregularFlag = largeDiffCount >= Math.max(2, Math.floor(ibis.length * 0.4));
+    this.stressLevel = this.rmssd < 20 ? "High" : this.rmssd < 45 ? "Moderate" : "Low";
   }
 }
 

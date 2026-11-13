@@ -13,7 +13,8 @@ import { VERT, FRAG } from "./shaders/xray.js";
 import { playSoftChime, playHeartSound, playS1, playS2 } from "./audio/sounds.js";
 import { RPPGDetector } from "./physiology/rppg.js";
 import { WiggersCycle } from "./physiology/wiggers.js";
-import { evaluateCobbAngle, evaluateCROM, evaluateTMJ } from "./physiology/clinical.js";
+import { evaluateCobbAngle, evaluateCROM, evaluateTMJ,
+         RespirationTracker, evaluateFacialSymmetry, evaluateHealthScreeningSummary } from "./physiology/clinical.js";
 import { computeErgonomics } from "./physiology/ergonomics.js";
 import { initInspector, showAnatomyInspector, hideAnatomyInspector } from "./ui/inspector.js";
 import { generateClinicalReport } from "./clinical/report.js";
@@ -349,6 +350,10 @@ syncUI();
 const limbMeshes = {};
 const rppgDetector = new RPPGDetector(6);
 const wiggersCycle = new WiggersCycle();
+const respTracker = new RespirationTracker();
+let latestFacial = { symmetryScore: 100, status: "normal" };
+let latestRespCam = { rr: 0, confidence: 0 };
+let lastScreenAt = 0;
 const ecgHistory = [];
 const meshes = {};
 const handRigs = [];
@@ -1742,6 +1747,47 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
     }
   }
 
+  if (now - lastScreenAt >= 500) {
+    lastScreenAt = now;
+    if (poseLms) latestRespCam = respTracker.update(poseLms, now);
+    if (faceLms) latestFacial = evaluateFacialSymmetry(faceLms);
+    const activeResp = (latestRespCam.confidence > 0.35 && latestRespCam.rr > 0) ? latestRespCam.rr : (S.resp || 15);
+    const tmjRes = evaluateTMJ(head.found ? head.jaw : 0.75);
+    const scr = evaluateHealthScreeningSummary({
+      bpm: (rppgLatest && rppgLatest.confidence > 0.35) ? rppgLatest.bpm : (S.bpm || 75),
+      resp: activeResp,
+      rppg: rppgLatest,
+      ergo: lastErgo,
+      cobb: lastCobb,
+      facial: latestFacial,
+      tmj: tmjRes,
+      lang: S.lang
+    });
+    if ($("screen_score")) {
+      $("screen_score").textContent = scr.score + "/100";
+      $("screen_score").style.color = scr.overallLevel === "normal" ? "#4ade80" : scr.overallLevel === "monitor" ? "#facc15" : "#f87171";
+    }
+    if ($("screen_badge")) {
+      const b = $("screen_badge");
+      b.className = "ergo-badge " + (scr.overallLevel === "normal" ? "good" : scr.overallLevel === "monitor" ? "warn" : "bad");
+      b.textContent = scr.overallLevel === "normal"
+        ? (S.lang === "en" ? "🟢 Normal Preliminary Screening" : "🟢 ปกติ (Normal Screening)")
+        : scr.overallLevel === "monitor"
+        ? (S.lang === "en" ? "🟡 Monitor / Posture & Stress Advisory" : "🟡 ควรติดตาม (Monitor)")
+        : (S.lang === "en" ? "🔴 Consult Healthcare Professional" : "🔴 แนะนำปรึกษาแพทย์ (Consult)");
+    }
+    if ($("screen_hrv")) $("screen_hrv").textContent = rppgLatest && rppgLatest.rmssd ? `${rppgLatest.rmssd} ms (SDNN ${rppgLatest.sdnn})` : "- ms";
+    if ($("screen_stress")) $("screen_stress").textContent = rppgLatest ? (rppgLatest.irregularFlag ? "⚠️ Irregular" : rppgLatest.stressLevel || "Normal") : "-";
+    if ($("screen_rr")) $("screen_rr").textContent = latestRespCam.rr > 0 ? `${latestRespCam.rr} /min (Cam)` : `${Math.round(S.resp || 15)} /min`;
+    if ($("screen_face")) $("screen_face").textContent = `${latestFacial.symmetryScore}%`;
+    if ($("screen_sqi")) $("screen_sqi").textContent = rppgLatest ? `${rppgLatest.sqi || 0}%` : "-";
+    if ($("screen_tmj")) $("screen_tmj").textContent = `${tmjRes.mm} mm`;
+    if ($("screen_recom")) {
+      const lines = scr.alerts.length ? [...scr.alerts, ...scr.recommendations] : scr.recommendations;
+      $("screen_recom").textContent = lines.slice(0, 3).join(" • ");
+    }
+  }
+
   if (S.showdata) {
     if (faceLms) { g.fillStyle = "rgba(127,255,170,.85)"; for (const p of faceLms) g.fillRect((1 - p.x) * W - 1, p.y * H - 1, 2, 2); }
     g.strokeStyle = "rgba(255,183,3,.9)"; g.fillStyle = "#ffb703"; g.lineWidth = 1.5;
@@ -1958,6 +2004,12 @@ async function boot() {
         cobbLabel: lastCobb ? (lastCobb.status === "normal" ? "ปกติ (Scoliosis < 10°)" : "Mild Scoliosis Trend") : "ปกติ (Normal)",
         jawMm: lastErgo ? lastErgo.jawMm : 40,
         shoulderTilt: bodyRig && bodyRig.info ? bodyRig.info.shoulderTilt : 0,
+        rmssd: rppgLatest ? (rppgLatest.rmssd || 0) : 0,
+        sdnn: rppgLatest ? (rppgLatest.sdnn || 0) : 0,
+        sqi: rppgLatest ? (rppgLatest.sqi || 0) : 0,
+        stressLevel: rppgLatest ? (rppgLatest.stressLevel || "Normal") : "Normal",
+        irregularFlag: Boolean(rppgLatest && rppgLatest.irregularFlag),
+        facialSymmetry: latestFacial ? latestFacial.symmetryScore : 100
       };
       generateClinicalReport(data);
     };

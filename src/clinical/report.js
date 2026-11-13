@@ -81,6 +81,18 @@ export function generateClinicalReport(data) {
       <td>7-Phase Cardiac Cycle</td>
       <td>การบีบคลายตัวของหัวใจ 4 ห้องสัมพันธ์กับคลื่น Lead II ECG</td>
     </tr>
+    <tr>
+      <td><b>ความแปรปรวนอัตราหัวใจ (HRV: RMSSD / SDNN)</b></td>
+      <td><b>${data.rmssd || 0} ms / ${data.sdnn || 0} ms</b> (SQI ${data.sqi || 0}%)</td>
+      <td>RMSSD ≥ 20 ms (สมดุลประสาทอัตโนมัติ)</td>
+      <td>ระดับความเครียด: <b>${data.stressLevel || "Normal"}</b> ${data.irregularFlag ? '<span class="badge" style="background:#fee2e2; color:#dc2626">Irregular Rhythm Flag</span>' : ""}</td>
+    </tr>
+    <tr>
+      <td><b>ความสมมาตรของใบหน้า (Facial Symmetry)</b></td>
+      <td><b>${data.facialSymmetry ?? 100}%</b></td>
+      <td>≥ 85% (สมมาตรปกติ)</td>
+      <td>${(data.facialSymmetry ?? 100) < 82 ? "ควรเฝ้าระวังความไม่สมมาตรของใบหน้า/มุมปาก" : "กล้ามเนื้อใบหน้าและเปลือกตาสมมาตรปกติ"}</td>
+    </tr>
   </table>
 
   <div class="section-title">2. ชีวกลศาสตร์กระดูกคอและแนวกระดูกสันหลัง (Biomechanics & Spine Alignment)</div>
