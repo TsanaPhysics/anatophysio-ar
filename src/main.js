@@ -3,7 +3,8 @@ import { createBodyRig, updateBodyRig, segKey } from "./anatomy/body-rig.js";
 import { ANATOMY_DICT } from "./anatomy/dictionary.js";
 import { THORAX_LABELS } from "./anatomy/thorax-labels.js";
 import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeometry,
-         buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildSkeletonParts, buildFullSkeletonGeometry,
+         buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildAirwayAndDiaphragm,
+         buildSkeletonParts, buildFullSkeletonGeometry,
          applyBrainGyriAndSulci, buildDigitalBrainConnectome, buildOcularVasculature,
          buildVascularSystemParts, buildLimbMuscleParts } from "./anatomy/procedural.js";
 import { UI_TEXT } from "./ui/i18n.js";
@@ -130,6 +131,9 @@ function updateUILanguage() {
   setTxt("ui_ck_twist", t.ck_twist);
   setTxt("ui_ck_rppg", t.ck_rppg);
   setTxt("ui_ck_ecg", t.ck_ecg);
+  setTxt("ui_ck_alveolar", t.ck_alveolar);
+  setTxt("ui_btn_flow_video", t.btn_flow_video);
+  setTxt("ui_flow_modal_title", t.flow_modal_title);
   setTxt("ui_ergo_cobb_lbl", t.ergo_cobb_lbl);
   setTxt("ui_ergo_crom_lbl", t.ergo_crom_lbl);
   setTxt("ui_mr_head", t.mr_head);
@@ -161,7 +165,7 @@ const DEFAULTS = {
   skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false, vessels: true,
   eyes: true, eye_vessels: true, fundusHud: true, outline: true, hands: true,
   ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true, region: "auto",
-  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true,
+  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true, alveolarHud: true,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
   fs: 1, fw: 1, fh: 1, fd: 1, fx: 0, fy: 0, fz: 0, labels: false,
   lang: "both", ergo: true, ergoAudio: true
@@ -186,6 +190,7 @@ function syncUI() {
   $("ergo_audio").checked = S.ergoAudio;
   if ($("rppg_enable")) $("rppg_enable").checked = S.rppg;
   if ($("ecg_hud")) $("ecg_hud").checked = S.ecgHud;
+  if ($("alveolar_hud")) $("alveolar_hud").checked = S.alveolarHud;
   if ($("heart_sound")) $("heart_sound").checked = S.heartAudio;
   if ($("helical_twist")) $("helical_twist").checked = S.twist;
   for (const k of SLIDERS) { const el = $(k); if (el) el.value = S[k]; }
@@ -220,6 +225,21 @@ $("ergo_enable").onchange = e => { S.ergo = e.target.checked; save(); };
 $("ergo_audio").onchange = e => { S.ergoAudio = e.target.checked; save(); };
 if ($("rppg_enable")) $("rppg_enable").onchange = e => { S.rppg = e.target.checked; save(); };
 if ($("ecg_hud")) $("ecg_hud").onchange = e => { S.ecgHud = e.target.checked; save(); };
+if ($("alveolar_hud")) $("alveolar_hud").onchange = e => { S.alveolarHud = e.target.checked; save(); };
+if ($("btn_flow_video") && $("flow_media_modal")) {
+  const modal = $("flow_media_modal");
+  const vid = $("flow_video_player");
+  $("btn_flow_video").onclick = () => {
+    modal.style.display = "flex";
+    if (vid) { vid.currentTime = 0; vid.play().catch(() => {}); }
+  };
+  const closeModal = () => {
+    modal.style.display = "none";
+    if (vid) vid.pause();
+  };
+  if ($("btn_close_flow_modal")) $("btn_close_flow_modal").onclick = closeModal;
+  modal.onclick = e => { if (e.target === modal) closeModal(); };
+}
 if ($("heart_sound")) $("heart_sound").onchange = e => { S.heartAudio = e.target.checked; save(); };
 if ($("helical_twist")) $("helical_twist").onchange = e => { S.twist = e.target.checked; save(); };
 for (const k of SLIDERS) { const el = $(k); if (el) el.oninput = e => { S[k] = parseFloat(e.target.value); save(); syncUI(); }; }
@@ -392,6 +412,11 @@ function buildScene() {
   // 3. Bilateral Lungs (ปอดซ้าย-ขวา - correct anatomical situs)
   const lungsGeo = buildRealisticLungsGeometry();
   lungsGroup = add("lungs", lungsGeo, "lungs", 0x55e0c5, 0xd99595, 2, bodyGroup);
+
+  // 3b. Airway Tree (Trachea + Bronchi) & Muscular Diaphragm Dome (Google Flow Concept)
+  const { airwayGeo, diaphragmGeo } = buildAirwayAndDiaphragm();
+  add("airway", airwayGeo, "lungs", 0x7dd3fc, 0xe2e8f0, 3, bodyGroup);
+  add("diaphragm", diaphragmGeo, "lungs", 0xfb7185, 0xc94c5b, 3, bodyGroup);
 
   // 4. Realistic 4-Chamber Heart & Great Vessels (Apex & Aorta at subject's left)
   const heartGeo = buildRealisticHeartGeometry();
@@ -970,6 +995,98 @@ function drawFundusHUD(g, now) {
   g.restore();
 }
 
+function drawAlveolarHUD(g, now, breath, respRate) {
+  const boxW = Math.min(276, W * 0.45), boxH = 96;
+  const bx = 14, by = H - boxH - 16;
+  const t = now / 1000;
+  const insp = Math.cos((t * (respRate / 60)) * Math.PI * 2) >= 0;
+
+  g.save();
+  g.fillStyle = "rgba(10, 14, 24, 0.90)";
+  g.strokeStyle = "rgba(45, 212, 191, 0.48)";
+  g.lineWidth = 1;
+  const r = 8;
+  g.beginPath();
+  g.moveTo(bx + r, by); g.lineTo(bx + boxW - r, by); g.quadraticCurveTo(bx + boxW, by, bx + boxW, by + r);
+  g.lineTo(bx + boxW, by + boxH - r); g.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - r, by + boxH);
+  g.lineTo(bx + r, by + boxH); g.quadraticCurveTo(bx, by + boxH, bx, by + boxH - r);
+  g.lineTo(bx, by + r); g.quadraticCurveTo(bx, by, bx + r, by);
+  g.closePath();
+  g.fill(); g.stroke();
+
+  // Alveolar Sac Viewport (left side)
+  const cx = bx + 44, cy = by + 38;
+  const alvR = 19 + breath * 4.5;
+  const alvGrad = g.createRadialGradient(cx, cy, 3, cx, cy, alvR);
+  alvGrad.addColorStop(0, "rgba(186, 230, 253, 0.32)");
+  alvGrad.addColorStop(1, "rgba(45, 212, 191, 0.16)");
+  g.fillStyle = alvGrad;
+  g.strokeStyle = "rgba(94, 234, 212, 0.85)";
+  g.lineWidth = 1.6;
+  g.beginPath(); g.arc(cx, cy, alvR, 0, Math.PI * 2); g.fill(); g.stroke();
+
+  // Bronchiole neck
+  g.strokeStyle = "rgba(125, 211, 252, 0.75)";
+  g.lineWidth = 5;
+  g.beginPath(); g.moveTo(cx, by + 10); g.lineTo(cx, cy - alvR + 2); g.stroke();
+
+  // Pulmonary Capillary Arc underneath alveolus
+  const capY = by + 74;
+  g.lineCap = "round";
+  const capGrad = g.createLinearGradient(bx + 12, capY, bx + 76, capY);
+  capGrad.addColorStop(0, "rgba(99, 102, 241, 0.65)");
+  capGrad.addColorStop(0.5, "rgba(168, 85, 247, 0.65)");
+  capGrad.addColorStop(1, "rgba(255, 59, 92, 0.75)");
+  g.strokeStyle = capGrad;
+  g.lineWidth = 7;
+  g.beginPath();
+  g.moveTo(bx + 12, capY);
+  g.quadraticCurveTo(cx, capY - 12, bx + 76, capY);
+  g.stroke();
+
+  // Moving Red Blood Cells (RBCs) shifting from deoxygenated -> oxygenated
+  for (let i = 0; i < 4; i++) {
+    const p = ((t * 0.45 + i * 0.25) % 1);
+    const rx = (bx + 14) + p * 60;
+    const ry = capY - Math.sin(p * Math.PI) * 6;
+    const red = Math.round(99 + p * (255 - 99));
+    const green = Math.round(102 - p * 43);
+    const blue = Math.round(241 - p * 149);
+    g.fillStyle = `rgb(${red},${green},${blue})`;
+    g.beginPath(); g.arc(rx, ry, 2.7, 0, Math.PI * 2); g.fill();
+  }
+
+  // O2 (cyan) diffusing down & CO2 (amber) diffusing up across alveolar-capillary membrane
+  const diffP = (t * 0.9) % 1;
+  g.fillStyle = "#38bdf8";
+  g.beginPath(); g.arc(cx - 7, cy + 10 + diffP * 14, 2.2, 0, Math.PI * 2); g.fill();
+  g.fillStyle = "#fbbf24";
+  g.beginPath(); g.arc(cx + 7, (capY - 8) - diffP * 14, 2.2, 0, Math.PI * 2); g.fill();
+
+  // Telemetry text (right side)
+  const tx = bx + 88;
+  g.font = "700 10.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#5eead4";
+  g.textAlign = "left"; g.textBaseline = "top";
+  g.fillText("🫁 " + (S.lang === "en" ? "ALVEOLAR GAS EXCHANGE" : "การแลกเปลี่ยนแก๊สถุงลม"), tx, by + 10);
+
+  const pao2 = Math.round(98 + breath * 8);
+  const paco2 = Math.round(42 - breath * 4);
+  g.font = "500 10px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#eef2fa";
+  g.fillText(`PAO₂: ${pao2} mmHg  |  SpO₂: 98%`, tx, by + 27);
+  g.fillText(`PACO₂: ${paco2} mmHg  |  RR: ${Math.round(respRate)} /min`, tx, by + 42);
+  g.fillText(`O₂ → Capillary  |  CO₂ → Alveolus`, tx, by + 57);
+
+  g.font = "600 9.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = insp ? "#38bdf8" : "#fbbf24";
+  g.fillText(insp
+    ? (S.lang === "en" ? "● INSPIRATION (Diaphragm ↓)" : "● หายใจเข้า (กะบังลมเลื่อนลง ↓)")
+    : (S.lang === "en" ? "● EXPIRATION (Diaphragm ↑)" : "● หายใจออก (กะบังลมยกตัวขึ้น ↑)"), tx, by + 73);
+
+  g.restore();
+}
+
 function drawECGHUD(g, wState, rppgRes) {
   if (!S.ecgHud) return;
   const boxW = Math.min(270, W * 0.44), boxH = 76;
@@ -1249,13 +1366,20 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
     if (wState.triggerS2) playS2(S.heartAudio);
   }
 
-  // 2. Respiratory Cycle (Lungs & Thoracic expansion)
+  // 2. Respiratory Cycle (Lungs, Airway Tree, Diaphragm Dome & Thoracic expansion)
+  const respRate = S.resp || 15;
+  const respPhase = (now / 1000) * (respRate / 60) * Math.PI * 2;
+  const breath = 0.5 + 0.5 * Math.sin(respPhase);
   if (S.lungs || S.ribs) {
-    const respRate = S.resp || 15;
-    const respPhase = (now / 1000) * (respRate / 60) * Math.PI * 2;
-    const breath = 0.5 + 0.5 * Math.sin(respPhase);
     if (meshes.lungs) {
       meshes.lungs.mesh.scale.set(1 + breath * 0.08, 1 + breath * 0.06, 1 + breath * 0.09);
+    }
+    if (meshes.diaphragm) {
+      meshes.diaphragm.mesh.position.y = -breath * 1.4;
+      meshes.diaphragm.mesh.scale.set(1 + breath * 0.04, 1 - 0.12 * breath, 1 + breath * 0.05);
+    }
+    if (meshes.airway && meshes.airway.mesh.material.uniforms && meshes.airway.mesh.material.uniforms.uGain) {
+      meshes.airway.mesh.material.uniforms.uGain.value = (S.style === "solid" ? 1.0 : S.bright) * (0.9 + 0.35 * breath);
     }
     if (meshes.ribs && S.ribs) {
       meshes.ribs.mesh.scale.set(1 + breath * 0.03, 1 + breath * 0.02, 1 + breath * 0.035);
@@ -1301,6 +1425,7 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
   drawECGHUD(g, wState, rppgLatest);
   if (S.deep_learning) drawDeepLearningHUD(g, now, lastInferMs);
   if (S.fundusHud && (S.eye_vessels || S.eyes)) drawFundusHUD(g, now);
+  if (S.alveolarHud && S.lungs) drawAlveolarHUD(g, now, breath, respRate);
   if (activeRegion) drawRegionHUD(g, activeRegion, regionSource);
 
   // Ergonomics computation & HUD overlay

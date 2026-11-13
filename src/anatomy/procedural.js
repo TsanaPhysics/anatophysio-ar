@@ -412,6 +412,70 @@ export function buildRealisticLungsGeometry() {
   return mergeGeos(geos);
 }
 
+// ------------------------------ 4b. Detailed Airway Tree (Trachea/Bronchi) & Muscular Diaphragm ------------------------------
+export function buildAirwayAndDiaphragm() {
+  const airwayGeos = [];
+
+  // 1. Trachea with cartilaginous C-rings (from larynx y=-9.5 down to Carina y=-17.5)
+  const trachPts = [
+    new THREE.Vector3(0, -9.5, -1.6),
+    new THREE.Vector3(0, -13.5, -2.3),
+    new THREE.Vector3(0, -17.5, -2.5)
+  ];
+  const trachea = buildLoftedBone(trachPts, (t) => {
+    const ring = 1.0 + 0.14 * Math.sin(t * Math.PI * 22);
+    return { rx: 0.72 * ring, ry: 0.68 * ring };
+  }, 24, 12, true);
+  airwayGeos.push(trachea);
+
+  // 2. Main, Lobar & Segmental Bronchi branching into Right (3 lobes) & Left (2 lobes) lungs
+  const branches = [
+    // Right Main Bronchus (wider, more vertical) -> Superior, Middle, Inferior lobar branches
+    [new THREE.Vector3(0, -17.4, -2.5), new THREE.Vector3(-2.6, -18.5, -1.8), new THREE.Vector3(-4.8, -19.2, -1.0)],
+    [new THREE.Vector3(-2.6, -18.5, -1.8), new THREE.Vector3(-4.4, -17.0, -0.8), new THREE.Vector3(-5.6, -16.2, -0.5)],
+    [new THREE.Vector3(-4.4, -17.0, -0.8), new THREE.Vector3(-5.5, -18.2, -0.3)],
+    [new THREE.Vector3(-3.8, -18.8, -1.4), new THREE.Vector3(-5.4, -21.0, -0.4), new THREE.Vector3(-6.2, -22.2, 0.0)],
+    [new THREE.Vector3(-4.8, -19.2, -1.0), new THREE.Vector3(-5.3, -22.5, -0.9), new THREE.Vector3(-5.6, -25.0, -0.8)],
+    [new THREE.Vector3(-5.3, -22.5, -0.9), new THREE.Vector3(-4.2, -24.5, -0.5)],
+
+    // Left Main Bronchus (longer, more horizontal due to heart) -> Superior & Inferior lobar branches
+    [new THREE.Vector3(0, -17.4, -2.5), new THREE.Vector3(2.8, -18.8, -1.8), new THREE.Vector3(5.0, -19.4, -1.0)],
+    [new THREE.Vector3(2.8, -18.8, -1.8), new THREE.Vector3(4.5, -17.2, -0.8), new THREE.Vector3(5.6, -16.2, -0.5)],
+    [new THREE.Vector3(4.5, -17.2, -0.8), new THREE.Vector3(5.8, -18.0, -0.2)],
+    [new THREE.Vector3(4.2, -19.1, -1.2), new THREE.Vector3(4.6, -21.8, 0.2)],
+    [new THREE.Vector3(5.0, -19.4, -1.0), new THREE.Vector3(5.6, -22.4, -1.0), new THREE.Vector3(5.9, -24.8, -1.0)],
+    [new THREE.Vector3(5.6, -22.4, -1.0), new THREE.Vector3(4.5, -24.2, -0.8)]
+  ];
+
+  for (const pts of branches) {
+    const r0 = pts.length >= 3 && pts[0].x === 0 ? 0.56 : 0.34;
+    const b = buildLoftedBone(pts, (t) => r0 * (1 - 0.45 * t), 10, 8, true);
+    airwayGeos.push(b);
+  }
+
+  // 3. Muscular Diaphragm Dome (กะบังลมรูปโดม - Right dome slightly higher due to liver)
+  const diaphGeos = [];
+  const rDome = new THREE.SphereGeometry(5.6, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.46);
+  rDome.scale(0.95, 0.52, 0.85);
+  rDome.translate(-4.0, -28.0, -0.6);
+  diaphGeos.push(rDome);
+
+  const lDome = new THREE.SphereGeometry(5.4, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.46);
+  lDome.scale(0.95, 0.48, 0.85);
+  lDome.translate(4.0, -28.4, -0.6);
+  diaphGeos.push(lDome);
+
+  const centralTendon = new THREE.CylinderGeometry(3.8, 4.4, 0.8, 16);
+  centralTendon.scale(1.1, 1.0, 0.78);
+  centralTendon.translate(0, -27.2, -0.5);
+  diaphGeos.push(centralTendon);
+
+  return {
+    airwayGeo: mergeGeos(airwayGeos),
+    diaphragmGeo: mergeGeos(diaphGeos)
+  };
+}
+
 // ------------------------------ 5. Full Skeleton (Limbs & Pelvis - High-Fidelity Anatomical Bones) ------------------------------
 export function buildSkeletonParts() {
   const geos = [];  // axial: lumbar spine, sacrum, coccyx, pelvic girdle
