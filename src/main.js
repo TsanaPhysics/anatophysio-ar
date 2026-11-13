@@ -4,7 +4,8 @@ import { ANATOMY_DICT } from "./anatomy/dictionary.js";
 import { THORAX_LABELS } from "./anatomy/thorax-labels.js";
 import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeometry,
          buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildSkeletonParts, buildFullSkeletonGeometry,
-         applyBrainGyriAndSulci, buildDigitalBrainConnectome, buildOcularVasculature } from "./anatomy/procedural.js";
+         applyBrainGyriAndSulci, buildDigitalBrainConnectome, buildOcularVasculature,
+         buildVascularSystemParts, buildLimbMuscleParts } from "./anatomy/procedural.js";
 import { UI_TEXT } from "./ui/i18n.js";
 import { VERT, FRAG } from "./shaders/xray.js";
 import { playSoftChime, playHeartSound, playS1, playS2 } from "./audio/sounds.js";
@@ -101,6 +102,8 @@ function updateUILanguage() {
   setTxt("ui_ck_skull", t.ck_skull);
   setTxt("ui_ck_brain", t.ck_brain);
   setTxt("ui_ck_muscles", t.ck_muscles);
+  setTxt("ui_ck_vessels", t.ck_vessels);
+  setTxt("ui_region_lbl", t.region_lbl);
   setTxt("ui_ck_eyes", t.ck_eyes);
   setTxt("ui_ck_eye_vessels", t.ck_eye_vessels);
   setTxt("ui_ck_fundus", t.ck_fundus);
@@ -155,9 +158,9 @@ function updateUILanguage() {
 
 // ------------------------------ settings ------------------------------
 const DEFAULTS = {
-  skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false,
+  skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false, vessels: true,
   eyes: true, eye_vessels: true, fundusHud: true, outline: true, hands: true,
-  ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true,
+  ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true, region: "auto",
   bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
   fs: 1, fw: 1, fh: 1, fd: 1, fx: 0, fy: 0, fz: 0, labels: false,
@@ -167,13 +170,14 @@ let S = Object.assign({}, DEFAULTS);
 try { Object.assign(S, JSON.parse(localStorage.getItem("xr_settings") || "{}")); } catch (e) {}
 function save() { try { localStorage.setItem("xr_settings", JSON.stringify(S)); } catch (e) {} }
 
-const LAYERS = ["skull", "brain", "digital_brain", "muscles", "eyes", "eye_vessels", "outline", "hands", "ribs", "heart", "lungs", "cartilage", "skeleton"];
+const LAYERS = ["skull", "brain", "digital_brain", "muscles", "vessels", "eyes", "eye_vessels", "outline", "hands", "ribs", "heart", "lungs", "cartilage", "skeleton"];
 const SLIDERS = ["bright", "real", "feather", "cut", "fs", "fw", "fh", "fd", "fx", "fy", "fz", "bpm", "resp"];
 
 function syncUI() {
   for (const k of LAYERS) { const el = $("L_" + k); if (el) el.checked = !!S[k]; }
   if ($("L_deep_learning")) $("L_deep_learning").checked = !!S.deep_learning;
   if ($("fundus_hud")) $("fundus_hud").checked = !!S.fundusHud;
+  if ($("region_focus")) $("region_focus").value = S.region || "auto";
   if (digitalBrainGroup) digitalBrainGroup.visible = !!S.digital_brain;
   if (eyeVasculatureGroup) eyeVasculatureGroup.visible = !!S.eye_vessels;
   for (const b of $("style").children) b.classList.toggle("on", b.dataset.style === S.style);
@@ -209,6 +213,7 @@ for (const k of LAYERS) {
 }
 if ($("L_deep_learning")) $("L_deep_learning").onchange = e => { S.deep_learning = e.target.checked; save(); };
 if ($("fundus_hud")) $("fundus_hud").onchange = e => { S.fundusHud = e.target.checked; save(); };
+if ($("region_focus")) $("region_focus").onchange = e => { S.region = e.target.value; save(); };
 for (const b of $("style").children) b.onclick = () => { S.style = b.dataset.style; save(); syncUI(); applyStyle(); };
 for (const b of $("lang_seg").children) b.onclick = () => { S.lang = b.dataset.lang; save(); syncUI(); };
 $("ergo_enable").onchange = e => { S.ergo = e.target.checked; save(); };
@@ -229,23 +234,27 @@ for (const b of document.querySelectorAll("[data-preset]")) b.onclick = () => {
   b.classList.add("active");
   const p = b.dataset.preset;
   if (p === "skeleton") {
-    S.skeleton = true; S.ribs = true; S.skull = true; S.eyes = true; S.heart = true; S.cartilage = true; S.lungs = false; S.brain = false; S.muscles = false; S.outline = true;
+    S.region = "auto"; S.skeleton = true; S.ribs = true; S.skull = true; S.eyes = true; S.heart = true; S.cartilage = true; S.lungs = false; S.brain = false; S.muscles = false; S.vessels = true; S.outline = true;
   } else if (p === "thorax") {
-    S.skeleton = false; S.ribs = true; S.skull = false; S.eyes = false; S.heart = true; S.cartilage = true; S.lungs = false; S.brain = false; S.muscles = false; S.outline = true;
+    S.region = "thorax"; S.skeleton = false; S.ribs = true; S.skull = false; S.eyes = false; S.heart = true; S.cartilage = true; S.lungs = true; S.brain = false; S.muscles = true; S.vessels = true; S.outline = true;
+  } else if (p === "arm") {
+    S.region = "arm"; S.skeleton = true; S.muscles = true; S.vessels = true; S.hands = true; S.ribs = false; S.skull = false; S.heart = false; S.lungs = false; S.cartilage = false; S.brain = false; S.digital_brain = false; S.eyes = false; S.eye_vessels = false; S.outline = true;
+  } else if (p === "leg") {
+    S.region = "leg"; S.skeleton = true; S.muscles = true; S.vessels = true; S.hands = false; S.ribs = false; S.skull = false; S.heart = false; S.lungs = false; S.cartilage = false; S.brain = false; S.digital_brain = false; S.eyes = false; S.eye_vessels = false; S.outline = true;
   } else if (p === "lungs") {
-    S.skeleton = false; S.ribs = true; S.skull = false; S.eyes = false; S.heart = true; S.cartilage = true; S.lungs = true; S.brain = false; S.muscles = false; S.outline = true;
+    S.region = "thorax"; S.skeleton = false; S.ribs = true; S.skull = false; S.eyes = false; S.heart = true; S.cartilage = true; S.lungs = true; S.brain = false; S.muscles = false; S.vessels = true; S.outline = true;
   } else if (p === "skull") {
-    S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.muscles = false; S.outline = true;
+    S.region = "head"; S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.muscles = false; S.vessels = true; S.outline = true;
   } else if (p === "eyes") {
-    S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.eye_vessels = true; S.fundusHud = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.digital_brain = false; S.muscles = false; S.outline = true;
+    S.region = "head"; S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.eye_vessels = true; S.fundusHud = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.digital_brain = false; S.muscles = false; S.outline = true;
   } else if (p === "brain") {
-    S.skeleton = false; S.ribs = false; S.skull = false; S.eyes = false; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.digital_brain = false; S.muscles = false; S.outline = true;
+    S.region = "head"; S.skeleton = false; S.ribs = false; S.skull = false; S.eyes = false; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.digital_brain = false; S.muscles = false; S.outline = true;
   } else if (p === "digital_brain") {
-    S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.digital_brain = true; S.deep_learning = true; S.muscles = false; S.outline = true;
+    S.region = "head"; S.skeleton = false; S.ribs = false; S.skull = true; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = true; S.digital_brain = true; S.deep_learning = true; S.muscles = false; S.outline = true;
   } else if (p === "muscles") {
-    S.skeleton = false; S.ribs = false; S.skull = false; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.muscles = true; S.outline = true;
+    S.region = "full"; S.skeleton = true; S.ribs = true; S.skull = false; S.eyes = true; S.heart = false; S.cartilage = false; S.lungs = false; S.brain = false; S.muscles = true; S.vessels = true; S.outline = true;
   } else {
-    S.skeleton = true; S.ribs = true; S.skull = true; S.eyes = true; S.heart = true; S.cartilage = true; S.lungs = true; S.brain = true; S.muscles = true; S.outline = true;
+    S.region = "full"; S.skeleton = true; S.ribs = true; S.skull = true; S.eyes = true; S.heart = true; S.cartilage = true; S.lungs = true; S.brain = true; S.muscles = true; S.vessels = true; S.outline = true;
   }
   save(); syncUI();
 };
@@ -391,10 +400,49 @@ function buildScene() {
   // 5. Full Body Skeleton: Axial (Lumbar spine & pelvis) + Articulated Limbs
   const skelParts = buildSkeletonParts();
   skelGroup = add("skeleton", skelParts.axial, "skeleton", 0xbfe3ff, 0xe9e2cf, 3, bodyGroup);
+  meshes["skeleton"].region = "pelvis";
+  meshes["ribs"].region = "thorax";
+  meshes["cartilage"].region = "thorax";
+  meshes["lungs"].region = "thorax";
+  meshes["heart"].region = "thorax";
   for (const k in skelParts.segments) {
     const m = add("skeleton_" + k, skelParts.segments[k], "skeleton", 0xbfe3ff, 0xe9e2cf, 3, bodyGroup);
     m.matrixAutoUpdate = false;
-    limbMeshes[k] = m;
+    meshes["skeleton_" + k].region = (k.startsWith("upperArm") || k.startsWith("forearm")) ? "arm" : "leg";
+    (limbMeshes[k] || (limbMeshes[k] = [])).push(m);
+  }
+
+  // 6. Systemic Blood Vessels (Arteries & Veins: Aorta, Vena Cava, Carotid, Brachial/Radial, Femoral/Tibial)
+  const vascParts = buildVascularSystemParts();
+  add("vessels_art_axial", vascParts.arteries.axial, "vessels", 0xff2e4c, 0xc81e3a, 5, bodyGroup);
+  meshes["vessels_art_axial"].region = "thorax";
+  add("vessels_vein_axial", vascParts.veins.axial, "vessels", 0x387dff, 0x1d4ed8, 5, bodyGroup);
+  meshes["vessels_vein_axial"].region = "thorax";
+  for (const k in vascParts.arteries.segments) {
+    const reg = (k.startsWith("upperArm") || k.startsWith("forearm")) ? "arm" : "leg";
+    const ma = add("artery_" + k, vascParts.arteries.segments[k], "vessels", 0xff2e4c, 0xc81e3a, 5, bodyGroup);
+    ma.matrixAutoUpdate = false;
+    meshes["artery_" + k].region = reg;
+    (limbMeshes[k] || (limbMeshes[k] = [])).push(ma);
+  }
+  for (const k in vascParts.veins.segments) {
+    const reg = (k.startsWith("upperArm") || k.startsWith("forearm")) ? "arm" : "leg";
+    const mv = add("vein_" + k, vascParts.veins.segments[k], "vessels", 0x387dff, 0x1d4ed8, 5, bodyGroup);
+    mv.matrixAutoUpdate = false;
+    meshes["vein_" + k].region = reg;
+    (limbMeshes[k] || (limbMeshes[k] = [])).push(mv);
+  }
+
+  // 7. Torso & Limb Skeletal Muscles (Pectorals, Abs, Deltoid, Biceps/Triceps, Forearm, Quads/Hams, Calf)
+  const muscParts = buildLimbMuscleParts();
+  add("muscles_torso_axial", muscParts.axial, "muscles", 0xff6b5e, 0xb5453c, 2, bodyGroup);
+  meshes["muscles_torso_axial"].region = "thorax";
+  for (const k in muscParts.segments) {
+    const reg = (k.startsWith("upperArm") || k.startsWith("forearm")) ? "arm" : "leg";
+    const mm = add("muscle_" + k, muscParts.segments[k], "muscles", 0xff6b5e, 0xb5453c, 2, bodyGroup);
+    mm.matrixAutoUpdate = false;
+    meshes["muscle_" + k].region = reg;
+    (limbMeshes[k] || (limbMeshes[k] = [])).push(mm);
   }
 
   for (let h = 0; h < 2; h++) {
@@ -487,11 +535,11 @@ function updateHead(matrixData, lms, jawOpen) {
 const clipState = { on: 0, x: 1, y: 0, w: 0 };
 let jawM = null;
 const XRAY_GAIN = {
-  outline: 0.55, muscles: 0.5, cerebrum: 0.36, hindbrain: 0.6, eyes: 0.9,
+  outline: 0.55, muscles: 0.52, vessels: 1.15, cerebrum: 0.36, hindbrain: 0.6, eyes: 0.9,
   ribs: 0.75, heart: 1.25, lungs: 0.42, cartilage: 0.65, skeleton: 0.75
 };
 
-function applyLayers() {
+function applyLayers(focusRegion = null) {
   const reveal = S.reveal;
   let clipOn = 0, cx = 1, cy = 0, cz = 0, cw = 0;
   if (reveal === "left")   { clipOn = 1; cx = 1;  cy = 0; cw = (S.cut - 0.5) * 16; }
@@ -501,12 +549,22 @@ function applyLayers() {
   clipState.on = clipOn; clipState.x = cx; clipState.y = cy; clipState.w = cw;
   jawPivot.updateMatrix(); meshes.jaw.mesh.updateMatrix();
   jawM.copy(jawPivot.matrix).multiply(meshes.jaw.mesh.matrix);
-  const heavy = (S.skull ? 1 : 0) + (S.brain ? 1 : 0) + (S.muscles ? 1 : 0) + (S.ribs ? 1 : 0) + (S.heart ? 1 : 0) + (S.lungs ? 1 : 0) + (S.skeleton ? 1 : 0);
+  const heavy = (S.skull ? 1 : 0) + (S.brain ? 1 : 0) + (S.muscles ? 1 : 0) + (S.vessels ? 1 : 0) + (S.ribs ? 1 : 0) + (S.heart ? 1 : 0) + (S.lungs ? 1 : 0) + (S.skeleton ? 1 : 0);
   const share = 1 / (0.4 + 0.6 * Math.max(1, heavy));
+  const explicitReg = S.region && S.region !== "auto" && S.region !== "full";
   for (const k in meshes) {
-    const { mesh, layer } = meshes[k], u = mesh.material.uniforms;
-    mesh.visible = layer === "veil" ? true : !!S[layer];
-    u.uGain.value = (S.style === "solid" && k !== "outline") ? Math.min(1.25, 0.6 + 0.4 * S.bright) : S.bright * (XRAY_GAIN[k] || 1) * (layer === "outline" ? 1 : share);
+    const item = meshes[k];
+    const { mesh, layer, region } = item, u = mesh.material.uniforms;
+    let vis = layer === "veil" ? true : !!S[layer];
+    if (explicitReg && region && region !== S.region && layer !== "veil" && layer !== "outline") {
+      vis = false;
+    }
+    mesh.visible = vis;
+    let gain = (S.style === "solid" && k !== "outline") ? Math.min(1.25, 0.6 + 0.4 * S.bright) : S.bright * (XRAY_GAIN[k] || XRAY_GAIN[layer] || 1) * (layer === "outline" ? 1 : share);
+    if (focusRegion && focusRegion !== "full" && region && layer !== "veil" && layer !== "outline") {
+      gain *= (region === focusRegion ? 1.45 : 0.40);
+    }
+    u.uGain.value = gain;
     u.uOpacity.value = layer === "veil" ? 1 - S.real : 1;
     u.uClipOn.value = clipOn; u.uClip.value.set(cx, cy, cz, cw);
     u.uFeather.value = S.feather * 0.75; u.uCutSoft.value = S.feather * 5;
@@ -987,6 +1045,122 @@ let pointer = null, frames = 0, fps = 0, fpsAt = 0, dataAt = 0;
 stage.addEventListener("pointermove", e => { const r = stage.getBoundingClientRect(); pointer = { x: e.clientX - r.left, y: e.clientY - r.top }; });
 stage.addEventListener("pointerleave", () => { pointer = null; });
 
+const REGION_INFO = {
+  head: {
+    th: "🧠 ศีรษะและสมอง (Head & Brain)",
+    en: "🧠 Head, Brain & Cranial Vessels",
+    bones: "Cranium, Mandible, C1-C7 Spine",
+    muscles: "Temporalis, Masseter, Orbicularis",
+    vessels: "Carotid Artery, Jugular Vein, Retinal CRA/CRV"
+  },
+  thorax: {
+    th: "🫁 ทรวงอกและหัวใจ (Thorax & Viscera)",
+    en: "🫁 Thorax, Heart, Lungs & Great Vessels",
+    bones: "Ribs 1-12, Sternum, T1-T12, Clavicles, Scapulae",
+    muscles: "Pectoralis Major, Intercostals, Diaphragm",
+    vessels: "Thoracic Aorta, Vena Cava, Pulmonary/Subclavian"
+  },
+  arm: {
+    th: "💪 แขนและมือ (Upper Limb & Vessels)",
+    en: "💪 Upper Limb (Bones, Muscles & Vessels)",
+    bones: "Humerus, Radius, Ulna, Carpals, Phalanges",
+    muscles: "Deltoid, Biceps, Triceps, Brachioradialis",
+    vessels: "Brachial, Radial & Ulnar Arteries; Cephalic/Basilic Veins"
+  },
+  pelvis: {
+    th: "🦴 เชิงกรานและสันหลังเอว (Pelvis & Lumbar)",
+    en: "🦴 Pelvis, Sacrum & Lumbar Spine",
+    bones: "L1-L5 Spine, Iliac Wings, Sacrum, Coccyx, Pubis",
+    muscles: "Rectus Abdominis, Iliopsoas, Gluteals",
+    vessels: "Abdominal Aorta, IVC, Common & External Iliac"
+  },
+  leg: {
+    th: "🦵 ขาและเท้า (Lower Limb & Vessels)",
+    en: "🦵 Lower Limb (Bones, Muscles & Vessels)",
+    bones: "Femur, Patella, Tibia, Fibula, Calcaneus, 5 Toes",
+    muscles: "Quadriceps, Hamstrings, Gastrocnemius (Calf)",
+    vessels: "Femoral, Popliteal, Tibial & Dorsalis Pedis"
+  }
+};
+
+const REGION_ANCHORS = [
+  { key: "head",   pos: [0, 2, -4],     useHead: true },
+  { key: "thorax", pos: [0, -21, 0],    useHead: false },
+  { key: "arm",    pos: [17, -26, 0],   useHead: false },
+  { key: "arm",    pos: [-17, -26, 0],  useHead: false },
+  { key: "pelvis", pos: [0, -44, -1],   useHead: false },
+  { key: "leg",    pos: [7, -65, 0],    useHead: false },
+  { key: "leg",    pos: [-7, -65, 0],   useHead: false }
+];
+
+function detectPointedRegion(hands) {
+  let px = null, py = null, src = "";
+  if (hands && hands[0] && hands[0][8]) {
+    px = (1 - hands[0][8].x) * W;
+    py = hands[0][8].y * H;
+    src = S.lang === "en" ? "👆 Hand Pointer" : "👆 ชี้ด้วยนิ้วมือ";
+  } else if (pointer) {
+    px = pointer.x;
+    py = pointer.y;
+    src = S.lang === "en" ? "🖱️ Cursor Focus" : "🖱️ ชี้ด้วยเมาส์";
+  }
+  if (px === null || !bodyGroup) return { key: null, src: "" };
+
+  let bestKey = null, bestDist = 95;
+  for (const a of REGION_ANCHORS) {
+    if (a.useHead && !headGroup.visible) continue;
+    if (!a.useHead && !bodyGroup.visible) continue;
+    tmpV.fromArray(a.pos).applyMatrix4(a.useHead ? headGroup.matrix : bodyGroup.matrix).project(cam);
+    const sx = (1 - (tmpV.x + 1) * 0.5) * W;
+    const sy = (1 - tmpV.y) * 0.5 * H;
+    const d = Math.hypot(px - sx, py - sy);
+    if (d < bestDist) { bestDist = d; bestKey = a.key; }
+  }
+  return { key: bestKey, src };
+}
+
+function drawRegionHUD(g, regionKey, sourceStr) {
+  const info = REGION_INFO[regionKey];
+  if (!info) return;
+  const boxW = Math.min(310, W * 0.5), boxH = 82;
+  const bx = 14, by = H - boxH - 16;
+  g.save();
+  g.fillStyle = "rgba(10, 15, 28, 0.90)";
+  g.strokeStyle = "rgba(88, 197, 255, 0.55)";
+  g.lineWidth = 1.2;
+  const r = 9;
+  g.beginPath();
+  g.moveTo(bx + r, by); g.lineTo(bx + boxW - r, by); g.quadraticCurveTo(bx + boxW, by, bx + boxW, by + r);
+  g.lineTo(bx + boxW, by + boxH - r); g.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - r, by + boxH);
+  g.lineTo(bx + r, by + boxH); g.quadraticCurveTo(bx, by + boxH, bx, by + boxH - r);
+  g.lineTo(bx, by + r); g.quadraticCurveTo(bx, by, bx + r, by);
+  g.closePath();
+  g.fill(); g.stroke();
+
+  g.font = "700 11.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#58c5ff";
+  g.textAlign = "left"; g.textBaseline = "top";
+  const title = S.lang === "en" ? info.en : info.th;
+  g.fillText(title, bx + 10, by + 8);
+
+  if (sourceStr) {
+    g.font = "600 9.5px system-ui,-apple-system,sans-serif";
+    g.fillStyle = "#47d984";
+    g.textAlign = "right";
+    g.fillText(sourceStr, bx + boxW - 10, by + 9);
+  }
+
+  g.textAlign = "left";
+  g.font = "500 10px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#e2e8f0";
+  g.fillText("🦴 " + info.bones, bx + 10, by + 27);
+  g.fillStyle = "#fda4af";
+  g.fillText("💪 " + info.muscles, bx + 10, by + 43);
+  g.fillStyle = "#ff6b81";
+  g.fillText("🩸 " + info.vessels, bx + 10, by + 59);
+  g.restore();
+}
+
 let lastPoseData = null;
 function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
   if (poseData) lastPoseData = poseData;
@@ -1000,25 +1174,46 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
                                                  m.material.uniforms.uFeather.value = S.feather * 0.75; }
     } else rig.group.visible = false;
   });
-  if (!head.found) {
-    headGroup.visible = false;
-    if (bodyGroup) bodyGroup.visible = false;
-  } else {
-    if (bodyGroup) {
-      bodyGroup.visible = true;
-      const headScale = S.fs * S.fw;
-      updateBodyRig(bodyRig, poseData, headGroup.matrix, headScale, cam, now);
+
+  headGroup.visible = !!head.found;
+  if (bodyGroup) {
+    const hasPose = Boolean(poseData && poseData.world);
+    if (head.found || hasPose || bodyRig.active) {
+      const headScale = head.found ? (S.fs * S.fw) : 1.0;
+      updateBodyRig(bodyRig, poseData, headGroup.matrix, headScale, cam, now, head.found);
+      bodyGroup.visible = Boolean(head.found || bodyRig.active);
       bodyGroup.matrix.copy(bodyRig.matrix);
       bodyGroup.matrixWorldNeedsUpdate = true;
       for (const k in limbMeshes) {
         if (bodyRig.seg[k]) {
-          limbMeshes[k].matrix.copy(bodyRig.seg[k].matrix);
-          limbMeshes[k].matrixWorldNeedsUpdate = true;
+          for (const m of limbMeshes[k]) {
+            m.matrix.copy(bodyRig.seg[k].matrix);
+            m.matrixWorldNeedsUpdate = true;
+          }
         }
       }
+    } else {
+      bodyGroup.visible = false;
     }
   }
-  applyLayers();
+
+  // Regional Detection: Explicit dropdown, Pointed Cursor/Hand, or Partial Camera Framing
+  let activeRegion = (S.region && S.region !== "auto" && S.region !== "full") ? S.region : null;
+  let regionSource = activeRegion ? (S.lang === "en" ? "🎯 Focused" : "🎯 โฟกัสเฉพาะส่วน") : "";
+  if (!activeRegion && S.region === "auto") {
+    const pointed = detectPointedRegion(hands);
+    if (pointed.key) {
+      activeRegion = pointed.key;
+      regionSource = pointed.src;
+    } else if (bodyRig && bodyRig.active && !head.found) {
+      const r = bodyRig.regions;
+      if (!r.thorax && (r.armL || r.armR)) { activeRegion = "arm"; regionSource = "📷 Auto Arm"; }
+      else if (!r.thorax && (r.legL || r.legR)) { activeRegion = "leg"; regionSource = "📷 Auto Leg"; }
+      else if (r.thorax && !r.pelvis) { activeRegion = "thorax"; regionSource = "📷 Auto Thorax"; }
+    }
+  }
+
+  applyLayers(activeRegion);
 
   // 1. Physiological Wiggers Cardiac Cycle & Helical Apex Twist
   const wState = wiggersCycle.evaluate(now, S.bpm || 75);
@@ -1106,6 +1301,7 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
   drawECGHUD(g, wState, rppgLatest);
   if (S.deep_learning) drawDeepLearningHUD(g, now, lastInferMs);
   if (S.fundusHud && (S.eye_vessels || S.eyes)) drawFundusHUD(g, now);
+  if (activeRegion) drawRegionHUD(g, activeRegion, regionSource);
 
   // Ergonomics computation & HUD overlay
   if (head.found && headGroup.visible) {
@@ -1225,7 +1421,7 @@ function liveLoop() {
         const hd = hr.handedness || hr.handednesses || [];
         sides = hands.map((h, i) => !!(hd[i] && hd[i][0] && hd[i][0].categoryName === "Left"));
       }
-      if (poseTracker && (S.skeleton || S.ribs || S.heart || S.lungs || S.ergo)) {
+      if (poseTracker && (S.skeleton || S.ribs || S.heart || S.lungs || S.muscles || S.vessels || S.ergo)) {
         const pr = poseTracker.detectForVideo(video, now);
         if (pr && pr.landmarks && pr.landmarks[0]) {
           poseData = { image: pr.landmarks[0], world: pr.worldLandmarks && pr.worldLandmarks[0] };
@@ -1238,8 +1434,9 @@ function liveLoop() {
     lastInferMs = lastInferMs * 0.85 + (inferEnd - inferStart) * 0.15;
     if ($("ui_dl_latency")) $("ui_dl_latency").textContent = "~" + lastInferMs.toFixed(1) + " ms (" + Math.round(1000 / Math.max(16, lastInferMs)) + " FPS)";
     say(head.found ? t.status_tracking + (hands.length ? t.status_hands : "") + bodyStr
-                   : hands.length ? "Hand found. Face the camera to see inside your body."
-                   : "No face found. Face the camera, with light on your face.", head.found || hands.length ? "ok" : "bad");
+                   : poseData ? "กำลังตรวจจับโครงสร้างร่างกายเฉพาะส่วน (Body/Limb Tracking Active)"
+                   : hands.length ? "Hand found. Point at any body part or face camera."
+                   : "No body detected. Point camera at head, chest, arm, or leg.", (head.found || poseData || hands.length) ? "ok" : "bad");
     renderFrame(now, faceLms, hands, sides, poseData, rppgLatest);
   }
   tick();

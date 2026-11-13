@@ -39,7 +39,9 @@ export function createBodyRig(three) {
     active: false, lastSeen: -1e9,
     pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: 1,
     matrix: new THREE.Matrix4(),
-    seg: {}, info: { torsoYaw: 0, torsoLean: 0, shoulderTilt: 0, elbowL: null, elbowR: null, kneeL: null, kneeR: null },
+    seg: {},
+    info: { torsoYaw: 0, torsoLean: 0, shoulderTilt: 0, elbowL: null, elbowR: null, kneeL: null, kneeR: null },
+    regions: { head: false, thorax: false, armL: false, armR: false, pelvis: false, legL: false, legR: false },
     _v: Array.from({ length: 8 }, () => new THREE.Vector3()),
     _q: new THREE.Quaternion(), _qi: new THREE.Quaternion(), _m: new THREE.Matrix4(), _m2: new THREE.Matrix4()
   };
@@ -67,11 +69,25 @@ const angleDeg = (a, b) => Math.acos(Math.max(-1, Math.min(1, a.dot(b)))) * 57.2
  * @param cam        perspective camera with the screen-fit-corrected projection
  * @param now        ms timestamp
  */
-export function updateBodyRig(rig, pose, headMatrix, headScale, cam, now) {
+export function updateBodyRig(rig, pose, headMatrix, headScale, cam, now, headFound = true) {
   const [vx, vy, vz, a, b, p, q] = rig._v;
   const world = pose && pose.world;
+  const img = pose && pose.image;
 
-  if (world && visible(world, LM.L_SH, LM.R_SH) && (!pose.image || visible(pose.image, LM.L_SH, LM.R_SH))) {
+  // Detect active anatomical regions in frame
+  rig.regions.head = !!headFound || (!!img && visible(img, LM.NOSE));
+  rig.regions.thorax = !!(world && visible(world, LM.L_SH, LM.R_SH));
+  rig.regions.armL = !!(world && visible(world, LM.L_SH, LM.L_EL));
+  rig.regions.armR = !!(world && visible(world, LM.R_SH, LM.R_EL));
+  rig.regions.pelvis = !!(world && visible(world, LM.L_HIP, LM.R_HIP));
+  rig.regions.legL = !!(world && visible(world, LM.L_HIP, LM.L_KN));
+  rig.regions.legR = !!(world && visible(world, LM.R_HIP, LM.R_KN));
+
+  const hasShoulders = world && visible(world, LM.L_SH, LM.R_SH) && (!img || visible(img, LM.L_SH, LM.R_SH));
+  const hasSingleArm = !hasShoulders && world && img && (visible(img, LM.L_SH, LM.L_EL) || visible(img, LM.R_SH, LM.R_EL));
+  const hasLegsOnly = !hasShoulders && !hasSingleArm && world && img && (visible(img, LM.L_HIP, LM.L_KN) || visible(img, LM.R_HIP, LM.R_KN));
+
+  if (hasShoulders) {
     // ---- torso orientation (camera space) ----
     toCam(world[LM.L_SH], a); toCam(world[LM.R_SH], b);
     vx.subVectors(a, b).normalize();                       // model +x = subject's left
@@ -85,10 +101,18 @@ export function updateBodyRig(rig, pose, headMatrix, headScale, cam, now) {
     rig._m.makeBasis(vx, vy, vz);
     rig._q.setFromRotationMatrix(rig._m);
 
-    // ---- anchor position: keep head depth, move to the shoulder midpoint seen on screen ----
-    p.fromArray(ANCHOR).applyMatrix4(headMatrix);
-    if (pose.image) {
-      const L = pose.image[LM.L_SH], R = pose.image[LM.R_SH];
+    // ---- anchor position: keep head depth if headFound, else estimate depth from shoulder span ----
+    if (headFound) {
+      p.fromArray(ANCHOR).applyMatrix4(headMatrix);
+    } else if (img) {
+      const L = img[LM.L_SH], R = img[LM.R_SH];
+      const ndcSpan = Math.hypot((L.x - R.x) * 2, (L.y - R.y) * 2);
+      const projX = cam.projectionMatrix.elements[0] || 1.5;
+      const dist = Math.max(25, Math.min(260, (31.6 * projX) / Math.max(0.08, ndcSpan)));
+      p.set(0, 0, -dist);
+    }
+    if (img) {
+      const L = img[LM.L_SH], R = img[LM.R_SH];
       p.applyMatrix4(cam.projectionMatrix);
       p.x = (L.x + R.x) - 1; p.y = 1 - (L.y + R.y);        // NDC of the midpoint
       p.applyMatrix4(cam.projectionMatrixInverse);
@@ -98,18 +122,65 @@ export function updateBodyRig(rig, pose, headMatrix, headScale, cam, now) {
     if (fresh) { rig.quat.copy(rig._q); rig.pos.copy(p); rig.scale = headScale; }
     else { rig.quat.slerp(rig._q, 0.45); rig.pos.lerp(p, 0.55); rig.scale += (headScale - rig.scale) * 0.3; }
     rig.active = true; rig.lastSeen = now;
+  } else if (hasSingleArm) {
+    // ---- Single-Arm Regional Anchoring (when face & opposite shoulder are out of frame) ----
+    const side = visible(img, LM.L_SH, LM.L_EL) ? 1 : -1;
+    const shIdx = side > 0 ? LM.L_SH : LM.R_SH;
+    const elIdx = side > 0 ? LM.L_EL : LM.R_EL;
+    const shImg = img[shIdx], elImg = img[elIdx];
+    const ndcArm = Math.hypot((shImg.x - elImg.x) * 2, (shImg.y - elImg.y) * 2);
+    const projX = cam.projectionMatrix.elements[0] || 1.5;
+    const dist = Math.max(25, Math.min(220, (14.2 * projX) / Math.max(0.06, ndcArm)));
 
+    rig._q.identity();
+    p.set(0, 0, -dist);
+    p.applyMatrix4(cam.projectionMatrix);
+    // Offset so the shoulder joint aligns with shImg
+    p.x = (shImg.x * 2 - 1) - (side * 15.8 * projX) / dist;
+    p.y = (1 - shImg.y * 2);
+    p.applyMatrix4(cam.projectionMatrixInverse);
+
+    const fresh = !rig.active;
+    if (fresh) { rig.quat.copy(rig._q); rig.pos.copy(p); rig.scale = 1.0; }
+    else { rig.quat.slerp(rig._q, 0.4); rig.pos.lerp(p, 0.5); rig.scale += (1.0 - rig.scale) * 0.3; }
+    rig.active = true; rig.lastSeen = now;
+  } else if (hasLegsOnly) {
+    // ---- Lower-Limb / Pelvis Regional Anchoring ----
+    const side = visible(img, LM.L_HIP, LM.L_KN) ? 1 : -1;
+    const hpIdx = side > 0 ? LM.L_HIP : LM.R_HIP;
+    const knIdx = side > 0 ? LM.L_KN : LM.R_KN;
+    const hpImg = img[hpIdx], knImg = img[knIdx];
+    const ndcThigh = Math.hypot((hpImg.x - knImg.x) * 2, (hpImg.y - knImg.y) * 2);
+    const projX = cam.projectionMatrix.elements[0] || 1.5;
+    const dist = Math.max(30, Math.min(260, (21.0 * projX) / Math.max(0.06, ndcThigh)));
+
+    rig._q.identity();
+    p.set(0, 0, -dist);
+    p.applyMatrix4(cam.projectionMatrix);
+    p.x = (hpImg.x * 2 - 1) - (side * 8.2 * projX) / dist;
+    p.y = (1 - hpImg.y * 2) + (31.9 * projX) / dist;
+    p.applyMatrix4(cam.projectionMatrixInverse);
+
+    const fresh = !rig.active;
+    if (fresh) { rig.quat.copy(rig._q); rig.pos.copy(p); rig.scale = 1.0; }
+    else { rig.quat.slerp(rig._q, 0.4); rig.pos.lerp(p, 0.5); rig.scale += (1.0 - rig.scale) * 0.3; }
+    rig.active = true; rig.lastSeen = now;
+  }
+
+  if (hasShoulders || hasSingleArm || hasLegsOnly) {
     // ---- clinical read-outs ----
-    rig.info.torsoYaw = Math.atan2(vx.z, vx.x) * -57.29578;
-    rig.info.shoulderTilt = Math.asin(Math.max(-1, Math.min(1, vx.y))) * 57.29578;
-    rig.info.torsoLean = Math.atan2(vy.z, vy.y) * 57.29578;
+    if (hasShoulders) {
+      rig.info.torsoYaw = Math.atan2(vx.z, vx.x) * -57.29578;
+      rig.info.shoulderTilt = Math.asin(Math.max(-1, Math.min(1, vx.y))) * 57.29578;
+      rig.info.torsoLean = Math.atan2(vy.z, vy.y) * 57.29578;
+    }
 
     // ---- limbs: target directions in model space ----
     rig._qi.copy(rig.quat).invert();
     for (const s of SEGMENTS) for (const side of [1, -1]) {
       const sg = rig.seg[segKey(s.name, side)];
       const pre = side > 0 ? "L_" : "R_", ia = LM[pre + s.a], ib = LM[pre + s.b];
-      const ok = visible(world, ia, ib) && (!pose.image || visible(pose.image, ia, ib));
+      const ok = visible(world, ia, ib) && (!img || visible(img, ia, ib));
       if (ok) {
         toCam(world[ib], a).sub(toCam(world[ia], b)).normalize().applyQuaternion(rig._qi);
         rig._q.setFromUnitVectors(sg.restDir, a);

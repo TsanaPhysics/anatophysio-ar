@@ -819,3 +819,237 @@ export function buildOcularVasculature() {
 
   return { arteryGeo, veinGeo, structuresGeo };
 }
+
+// ------------------------------ 9. Systemic Blood Vessels (Arteries & Veins: Axial + Articulated Limbs) ------------------------------
+export function buildVascularSystemParts() {
+  const artAxial = [], veinAxial = [];
+  const artParts = {}, veinParts = {};
+  const putA = (name, side, g) => { const k = name + (side > 0 ? "L" : "R"); (artParts[k] || (artParts[k] = [])).push(g); };
+  const putV = (name, side, g) => { const k = name + (side > 0 ? "L" : "R"); (veinParts[k] || (veinParts[k] = [])).push(g); };
+
+  // 9.1 Thoracic & Abdominal Aorta + Iliac Bifurcation
+  const aorta = buildLoftedBone([
+    new THREE.Vector3(0.4, -18.5, -0.8),   // Aortic Arch
+    new THREE.Vector3(-0.3, -22.5, -2.6),  // Descending Thoracic Aorta
+    new THREE.Vector3(-0.2, -32.0, -2.8),  // Abdominal Aorta
+    new THREE.Vector3(0.0, -40.5, -2.4)    // Aortic Bifurcation (L4)
+  ], (t) => 0.58 - 0.16 * t, 18, 10, true);
+  artAxial.push(aorta);
+
+  // Inferior & Superior Vena Cava
+  const ivc = buildLoftedBone([
+    new THREE.Vector3(-1.3, -15.0, -1.0),  // SVC
+    new THREE.Vector3(-1.2, -21.0, -1.8),  // Right Atrium entry
+    new THREE.Vector3(-1.1, -32.0, -2.5),  // IVC
+    new THREE.Vector3(-0.9, -41.0, -2.3)   // Iliac confluence
+  ], () => 0.62, 18, 10, true);
+  veinAxial.push(ivc);
+
+  for (const side of [-1, 1]) {
+    // Carotid Artery & Internal Jugular Vein (Neck to Skull base)
+    artAxial.push(buildLoftedBone([
+      new THREE.Vector3(side * 1.1, -17.5, 0.2),
+      new THREE.Vector3(side * 2.2, -12.0, -1.2),
+      new THREE.Vector3(side * 2.4, -6.5, -2.4)
+    ], () => 0.26, 10, 8, true));
+
+    veinAxial.push(buildLoftedBone([
+      new THREE.Vector3(side * 1.5, -16.5, 0.4),
+      new THREE.Vector3(side * 2.7, -12.0, -1.0),
+      new THREE.Vector3(side * 2.9, -6.5, -2.2)
+    ], () => 0.30, 10, 8, true));
+
+    // Subclavian & Axillary Vessels (Chest -> Shoulder)
+    artAxial.push(buildLoftedBone([
+      new THREE.Vector3(side * 1.0, -16.8, -0.5),
+      new THREE.Vector3(side * 7.5, -14.5, 0.2),
+      new THREE.Vector3(side * 15.2, -14.8, 0.4)
+    ], () => 0.30, 10, 8, true));
+
+    veinAxial.push(buildLoftedBone([
+      new THREE.Vector3(side * 1.4, -16.4, -0.2),
+      new THREE.Vector3(side * 7.8, -14.1, 0.6),
+      new THREE.Vector3(side * 15.5, -14.4, 0.7)
+    ], () => 0.34, 10, 8, true));
+
+    // Common & External Iliac Vessels (Pelvis -> Hip)
+    artAxial.push(buildLoftedBone([
+      new THREE.Vector3(0.0, -40.5, -2.4),
+      new THREE.Vector3(side * 4.5, -43.5, -1.2),
+      new THREE.Vector3(side * 8.2, -46.5, 0.2)
+    ], () => 0.36, 10, 8, true));
+
+    veinAxial.push(buildLoftedBone([
+      new THREE.Vector3(-0.9, -41.0, -2.3),
+      new THREE.Vector3(side * 4.0, -44.0, -0.9),
+      new THREE.Vector3(side * 7.8, -46.8, 0.4)
+    ], () => 0.40, 10, 8, true));
+
+    // Upper Arm: Brachial Artery + Cephalic/Basilic Veins
+    putA("upperArm", side, buildLoftedBone([
+      new THREE.Vector3(side * 15.2, -14.8, 0.4),
+      new THREE.Vector3(side * 16.2, -21.5, 0.6),
+      new THREE.Vector3(side * 17.3, -28.5, 0.0)
+    ], () => 0.25, 12, 8, true));
+
+    putV("upperArm", side, buildLoftedBone([
+      new THREE.Vector3(side * 15.8, -14.4, 0.9),
+      new THREE.Vector3(side * 17.4, -21.0, 0.8),
+      new THREE.Vector3(side * 18.2, -28.2, 0.2)  // Cephalic vein (lateral)
+    ], () => 0.24, 12, 8, true));
+
+    putV("upperArm", side, buildLoftedBone([
+      new THREE.Vector3(side * 15.0, -15.2, 0.1),
+      new THREE.Vector3(side * 15.8, -21.8, -0.2),
+      new THREE.Vector3(side * 16.8, -28.5, -0.4) // Basilic vein (medial)
+    ], () => 0.24, 12, 8, true));
+
+    // Forearm: Radial Artery + Ulnar Artery + Veins
+    putA("forearm", side, buildLoftedBone([
+      new THREE.Vector3(side * 17.4, -29.0, 0.0),
+      new THREE.Vector3(side * 18.8, -35.5, 0.4),
+      new THREE.Vector3(side * 19.5, -42.2, 0.7)  // Radial pulse at wrist
+    ], () => 0.18, 12, 6, true));
+
+    putA("forearm", side, buildLoftedBone([
+      new THREE.Vector3(side * 17.2, -29.0, -0.1),
+      new THREE.Vector3(side * 17.6, -35.5, -0.2),
+      new THREE.Vector3(side * 18.2, -42.0, 0.2)  // Ulnar artery
+    ], () => 0.17, 12, 6, true));
+
+    putV("forearm", side, buildLoftedBone([
+      new THREE.Vector3(side * 18.2, -28.5, 0.3),
+      new THREE.Vector3(side * 19.3, -35.5, 0.6),
+      new THREE.Vector3(side * 19.7, -42.0, 0.8)
+    ], () => 0.20, 12, 6, true));
+
+    // Thigh: Femoral Artery & Great Saphenous/Femoral Veins
+    putA("thigh", side, buildLoftedBone([
+      new THREE.Vector3(side * 8.2, -46.5, 0.3),
+      new THREE.Vector3(side * 8.8, -54.0, 0.9),
+      new THREE.Vector3(side * 7.2, -62.5, 0.2),
+      new THREE.Vector3(side * 6.8, -67.2, -0.6)  // Popliteal continuation
+    ], () => 0.34, 16, 8, true));
+
+    putV("thigh", side, buildLoftedBone([
+      new THREE.Vector3(side * 7.7, -46.8, 0.5),
+      new THREE.Vector3(side * 7.8, -55.0, 1.1),
+      new THREE.Vector3(side * 6.4, -63.0, 0.6),
+      new THREE.Vector3(side * 6.2, -67.5, 0.2)   // Great Saphenous / Femoral Vein
+    ], () => 0.36, 16, 8, true));
+
+    // Shin: Anterior & Posterior Tibial Arteries + Dorsalis Pedis + Saphenous Vein
+    putA("shin", side, buildLoftedBone([
+      new THREE.Vector3(side * 6.8, -67.8, -0.6),
+      new THREE.Vector3(side * 7.0, -76.0, 0.8),
+      new THREE.Vector3(side * 6.4, -87.5, 0.9),
+      new THREE.Vector3(side * 6.0, -89.8, 4.8)   // Dorsalis Pedis
+    ], () => 0.22, 16, 6, true));
+
+    putV("shin", side, buildLoftedBone([
+      new THREE.Vector3(side * 6.2, -68.0, 0.2),
+      new THREE.Vector3(side * 6.0, -77.5, 0.7),
+      new THREE.Vector3(side * 5.8, -88.0, 0.6),
+      new THREE.Vector3(side * 5.6, -90.0, 4.5)
+    ], () => 0.24, 16, 6, true));
+  }
+
+  const out = {
+    arteries: { axial: mergeGeos(artAxial), segments: {} },
+    veins: { axial: mergeGeos(veinAxial), segments: {} }
+  };
+  for (const k in artParts) out.arteries.segments[k] = mergeGeos(artParts[k]);
+  for (const k in veinParts) out.veins.segments[k] = mergeGeos(veinParts[k]);
+  return out;
+}
+
+// ------------------------------ 10. Limb & Torso Skeletal Muscles (กล้ามเนื้อลำตัวและระยางค์) ------------------------------
+export function buildLimbMuscleParts() {
+  const axial = [];
+  const parts = {};
+  const put = (name, side, g) => { const k = name + (side > 0 ? "L" : "R"); (parts[k] || (parts[k] = [])).push(g); };
+
+  // Pectoralis Major & Rectus Abdominis (Axial torso)
+  for (const side of [-1, 1]) {
+    const pec = new THREE.SphereGeometry(4.2, 14, 12);
+    pec.scale(1.15, 0.72, 0.38);
+    pec.rotateY(side * 0.22);
+    pec.translate(side * 5.2, -17.5, 3.3);
+    axial.push(pec);
+
+    for (let ab = 0; ab < 3; ab++) {
+      const rect = new THREE.SphereGeometry(1.75, 10, 8);
+      rect.scale(0.85, 1.1, 0.45);
+      rect.translate(side * 1.9, -27.5 - ab * 4.2, 3.0 - ab * 0.2);
+      axial.push(rect);
+    }
+
+    // Deltoid (Shoulder Cap) & Biceps/Triceps (Upper Arm)
+    const deltoid = new THREE.SphereGeometry(2.3, 12, 10);
+    deltoid.scale(0.95, 1.35, 0.95);
+    deltoid.rotateZ(side * -0.18);
+    deltoid.translate(side * 16.0, -15.8, 0.4);
+    put("upperArm", side, deltoid);
+
+    const biceps = buildLoftedBone([
+      new THREE.Vector3(side * 15.8, -16.5, 1.1),
+      new THREE.Vector3(side * 16.7, -21.8, 1.35),
+      new THREE.Vector3(side * 17.4, -27.5, 0.1)
+    ], (t) => ({ rx: 1.35 * Math.sin(t * Math.PI * 0.85 + 0.2), ry: 1.15 * Math.sin(t * Math.PI * 0.85 + 0.2) }), 12, 10, true);
+    put("upperArm", side, biceps);
+
+    const triceps = buildLoftedBone([
+      new THREE.Vector3(side * 15.8, -16.8, -0.5),
+      new THREE.Vector3(side * 16.9, -21.8, -1.1),
+      new THREE.Vector3(side * 17.5, -27.8, -0.9)
+    ], (t) => ({ rx: 1.45 * Math.sin(t * Math.PI * 0.85 + 0.2), ry: 1.2 * Math.sin(t * Math.PI * 0.85 + 0.2) }), 12, 10, true);
+    put("upperArm", side, triceps);
+
+    // Forearm Flexors & Brachioradialis (tapering smoothly toward wrist)
+    const forearmMuscle = buildLoftedBone([
+      new THREE.Vector3(side * 17.6, -29.0, 0.2),
+      new THREE.Vector3(side * 18.4, -34.0, 0.4),
+      new THREE.Vector3(side * 18.9, -41.2, 0.4)
+    ], (t) => {
+      const belly = Math.sin(Math.pow(t, 0.6) * Math.PI) * 1.45 + 0.35 * (1 - t);
+      return { rx: Math.max(0.45, belly), ry: Math.max(0.45, belly * 0.9) };
+    }, 14, 10, true);
+    put("forearm", side, forearmMuscle);
+
+    // Thigh: Quadriceps Femoris (anterior) & Hamstrings (posterior)
+    const quad = buildLoftedBone([
+      new THREE.Vector3(side * 9.8, -48.0, 1.2),
+      new THREE.Vector3(side * 9.4, -55.5, 1.8),
+      new THREE.Vector3(side * 7.2, -65.5, 1.0)
+    ], (t) => {
+      const belly = 0.7 + 2.15 * Math.sin(t * Math.PI * 0.88 + 0.15);
+      return { rx: belly, ry: belly * 0.85 };
+    }, 16, 12, true);
+    put("thigh", side, quad);
+
+    const ham = buildLoftedBone([
+      new THREE.Vector3(side * 7.5, -50.0, -1.4),
+      new THREE.Vector3(side * 8.4, -57.0, -1.5),
+      new THREE.Vector3(side * 6.9, -65.5, -0.8)
+    ], (t) => {
+      const belly = 0.6 + 1.85 * Math.sin(t * Math.PI * 0.88 + 0.15);
+      return { rx: belly, ry: belly * 0.85 };
+    }, 14, 10, true);
+    put("thigh", side, ham);
+
+    // Shin: Gastrocnemius / Calf (posterior) & Tibialis Anterior
+    const calf = buildLoftedBone([
+      new THREE.Vector3(side * 7.0, -68.5, -0.9),
+      new THREE.Vector3(side * 7.1, -74.5, -1.65),
+      new THREE.Vector3(side * 6.5, -85.0, -0.85)
+    ], (t) => {
+      const belly = 0.4 + 1.65 * Math.sin(Math.pow(t, 0.65) * Math.PI);
+      return { rx: Math.max(0.35, belly), ry: Math.max(0.35, belly * 0.9) };
+    }, 14, 10, true);
+    put("shin", side, calf);
+  }
+
+  const out = { axial: mergeGeos(axial), segments: {} };
+  for (const k in parts) out.segments[k] = mergeGeos(parts[k]);
+  return out;
+}
