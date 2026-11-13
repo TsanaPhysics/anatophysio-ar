@@ -534,6 +534,8 @@ function buildScene() {
   cardiacValveGroup.add(bloodFlowPoints);
   cardiacValveGroup.visible = !!(S.heart && S.heartCutaway);
   heartGroup.add(cardiacValveGroup);
+  meshes["cardiac_septum"] = { mesh: septumMesh, layer: "heart", region: "thorax" };
+  meshes["cardiac_valves"] = { mesh: valveLeaflets[0].leafA, layer: "heart", region: "thorax" };
 
   // 5. Full Body Skeleton: Axial (Lumbar spine & pelvis) + Articulated Limbs
   const skelParts = buildSkeletonParts();
@@ -542,6 +544,9 @@ function buildScene() {
   meshes["ribs"].region = "thorax";
   meshes["cartilage"].region = "thorax";
   meshes["lungs"].region = "thorax";
+  meshes["airway"].region = "thorax";
+  meshes["diaphragm"].region = "thorax";
+  meshes["alveoli"].region = "thorax";
   meshes["heart"].region = "thorax";
   for (const k in skelParts.segments) {
     const m = add("skeleton_" + k, skelParts.segments[k], "skeleton", 0xbfe3ff, 0xe9e2cf, 3, bodyGroup);
