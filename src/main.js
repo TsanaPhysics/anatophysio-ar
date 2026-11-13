@@ -3,7 +3,7 @@ import { createBodyRig, updateBodyRig, segKey } from "./anatomy/body-rig.js";
 import { ANATOMY_DICT } from "./anatomy/dictionary.js";
 import { THORAX_LABELS } from "./anatomy/thorax-labels.js";
 import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeometry,
-         buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildAirwayAndDiaphragm,
+         buildRealisticHeartGeometry, buildRealisticHeartParts, buildRealisticLungsGeometry, buildAirwayAndDiaphragm,
          buildCardiacValvesAndFlow, buildAlveolarClusters,
          buildSkeletonParts, buildFullSkeletonGeometry,
          applyBrainGyriAndSulci, buildDigitalBrainConnectome, buildOcularVasculature,
@@ -486,9 +486,17 @@ function buildScene() {
   const alveoliGeo = buildAlveolarClusters();
   add("alveoli", alveoliGeo, "lungs", 0x5eead4, 0xfda4af, 3, bodyGroup);
 
-  // 4. Realistic 4-Chamber Heart & Great Vessels (Apex & Aorta at subject's left)
-  const heartGeo = buildRealisticHeartGeometry();
-  heartGroup = add("heart", heartGeo, "heart", 0xff3b5c, 0xb53545, 4, bodyGroup);
+  // 4. Sculpted Multi-Part 4-Chamber Heart & Color-Coded Great Vessels (Matches Flow Medical Look)
+  const hParts = buildRealisticHeartParts();
+  heartGroup = add("heart", hParts.myocardiumGeo, "heart", 0xff3b5c, 0xa81c33, 4, bodyGroup);
+  add("heart_aorta", hParts.aortaGeo, "heart", 0xff2a4b, 0xdc143c, 5, heartGroup);
+  add("heart_blue_vessels", hParts.blueVesselsGeo, "heart", 0x38bdf8, 0x2563eb, 5, heartGroup);
+  add("heart_pulm_veins", hParts.pulmVeinsGeo, "heart", 0xfb7185, 0xe11d48, 5, heartGroup);
+  add("heart_coronary", hParts.coronaryGeo, "heart", 0xfbbf24, 0xef4444, 6, heartGroup);
+  meshes["heart_aorta"].region = "thorax";
+  meshes["heart_blue_vessels"].region = "thorax";
+  meshes["heart_pulm_veins"].region = "thorax";
+  meshes["heart_coronary"].region = "thorax";
 
   // 4b. 3D Cutaway Cardiac Septum, Moving 3D Valves & Blood Flow Particles (Google Flow Realism)
   const cFlow = buildCardiacValvesAndFlow();
