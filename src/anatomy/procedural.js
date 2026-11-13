@@ -476,6 +476,99 @@ export function buildAirwayAndDiaphragm() {
   };
 }
 
+// ------------------------------ 4c. 3D Cardiac Septum, Moving Valves & Blood Flow Paths ------------------------------
+export function buildCardiacValvesAndFlow() {
+  const structGeos = [];
+
+  // Interventricular Septum (dividing RV & LV)
+  const septumPts = [
+    new THREE.Vector3(0.4, -18.8, 0.3),
+    new THREE.Vector3(0.7, -20.6, 0.4),
+    new THREE.Vector3(1.1, -22.5, 0.5)
+  ];
+  structGeos.push(buildLoftedBone(septumPts, (t) => 0.38 + 0.14 * Math.sin(t * Math.PI), 10, 8));
+
+  // 4 Valve Annulus Rings: Tricuspid, Mitral, Pulmonary, Aortic
+  const valvePositions = [
+    { name: "tricuspid", pos: [-0.9, -19.0, 0.25], radius: 0.62, kind: "av" },
+    { name: "mitral",    pos: [ 1.5, -19.0, -0.10], radius: 0.58, kind: "av" },
+    { name: "pulmonary", pos: [ 0.9, -18.5, 0.85], radius: 0.46, kind: "sl" },
+    { name: "aortic",    pos: [ 0.9, -18.1, 0.30], radius: 0.48, kind: "sl" }
+  ];
+  for (const v of valvePositions) {
+    const ring = new THREE.TorusGeometry(v.radius, 0.11, 8, 18);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(v.pos[0], v.pos[1], v.pos[2]);
+    structGeos.push(ring);
+  }
+
+  // Shared Valve Leaflet Geometry (hinges open/closed around local origin)
+  const leafletGeo = new THREE.SphereGeometry(0.42, 10, 8);
+  leafletGeo.scale(1.1, 0.16, 0.72);
+  leafletGeo.translate(0, -0.05, 0.22);
+
+  // Pre-sample 200 points along Deoxygenated (Right Heart) & Oxygenated (Left Heart) Splines
+  const deoxCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-1.4, -14.2, -0.6), // SVC
+    new THREE.Vector3(-1.4, -17.6, -0.2), // RA
+    new THREE.Vector3(-0.9, -19.2, 0.25), // Tricuspid
+    new THREE.Vector3(-0.3, -21.2, 0.75), // RV
+    new THREE.Vector3( 0.8, -18.8, 0.95), // Pulmonary Valve
+    new THREE.Vector3( 1.7, -16.6, 0.65), // Pulmonary Trunk
+    new THREE.Vector3( 3.0, -16.2, -0.2)  // Left Pulmonary Artery
+  ]);
+  const oxCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3( 3.2, -17.2, -0.7), // Pulmonary Veins
+    new THREE.Vector3( 1.4, -17.5, -0.5), // LA
+    new THREE.Vector3( 1.5, -19.2, -0.1), // Mitral
+    new THREE.Vector3( 2.1, -21.6, 0.45), // LV Apex
+    new THREE.Vector3( 1.0, -18.3, 0.30), // Aortic Valve
+    new THREE.Vector3( 0.7, -15.4, 0.45), // Ascending Aorta
+    new THREE.Vector3( 2.3, -15.0, -0.6), // Aortic Arch
+    new THREE.Vector3( 2.9, -19.5, -1.8)  // Descending Aorta
+  ]);
+
+  const SAMPLES = 200;
+  const deoxPath = new Float32Array(SAMPLES * 3);
+  const oxPath = new Float32Array(SAMPLES * 3);
+  for (let i = 0; i < SAMPLES; i++) {
+    const t = i / (SAMPLES - 1);
+    const pd = deoxCurve.getPointAt(t);
+    deoxPath[i * 3] = pd.x; deoxPath[i * 3 + 1] = pd.y; deoxPath[i * 3 + 2] = pd.z;
+    const po = oxCurve.getPointAt(t);
+    oxPath[i * 3] = po.x; oxPath[i * 3 + 1] = po.y; oxPath[i * 3 + 2] = po.z;
+  }
+
+  return {
+    structGeo: mergeGeos(structGeos),
+    leafletGeo,
+    valvePositions,
+    deoxPath,
+    oxPath,
+    samples: SAMPLES
+  };
+}
+
+// ------------------------------ 4d. 3D Alveolar Acini Clusters inside Lungs ------------------------------
+export function buildAlveolarClusters() {
+  const geos = [];
+  const centers = [
+    [-4.3, -18.2, -0.3], [-5.2, -17.6, -0.4], [-4.8, -20.5, -0.1], [-5.9, -21.0, -0.3],
+    [-4.5, -23.6, -0.5], [-5.8, -24.0, -0.7], [-6.2, -19.2, -0.4], [-5.0, -22.2, -0.2],
+    [ 4.3, -18.2, -0.3], [ 5.2, -17.6, -0.4], [ 4.8, -20.8, -0.1], [ 5.9, -21.2, -0.4],
+    [ 4.6, -23.4, -0.6], [ 5.8, -23.8, -0.8], [ 6.1, -19.4, -0.4], [ 5.1, -22.1, -0.3]
+  ];
+  const offsets = [[0, 0, 0], [0.28, 0.2, 0.15], [-0.26, 0.18, -0.12], [0.15, -0.24, 0.18], [-0.18, -0.2, -0.15]];
+  for (const [cx, cy, cz] of centers) {
+    for (const [ox, oy, oz] of offsets) {
+      const sac = new THREE.SphereGeometry(0.24, 7, 6);
+      sac.translate(cx + ox, cy + oy, cz + oz);
+      geos.push(sac);
+    }
+  }
+  return mergeGeos(geos);
+}
+
 // ------------------------------ 5. Full Skeleton (Limbs & Pelvis - High-Fidelity Anatomical Bones) ------------------------------
 export function buildSkeletonParts() {
   const geos = [];  // axial: lumbar spine, sacrum, coccyx, pelvic girdle

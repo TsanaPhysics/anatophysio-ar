@@ -4,6 +4,7 @@ import { ANATOMY_DICT } from "./anatomy/dictionary.js";
 import { THORAX_LABELS } from "./anatomy/thorax-labels.js";
 import { setThree, mergeGeos, buildBonyThoraxGeometry, buildCostalCartilageGeometry,
          buildRealisticHeartGeometry, buildRealisticLungsGeometry, buildAirwayAndDiaphragm,
+         buildCardiacValvesAndFlow, buildAlveolarClusters,
          buildSkeletonParts, buildFullSkeletonGeometry,
          applyBrainGyriAndSulci, buildDigitalBrainConnectome, buildOcularVasculature,
          buildVascularSystemParts, buildLimbMuscleParts } from "./anatomy/procedural.js";
@@ -31,6 +32,7 @@ let heartGroup = null, lungsGroup = null, ribsGroup = null, skelGroup = null;
 let bodyGroup = null, bodyRig = null;
 let digitalBrainGroup = null, digitalBrainLines = null, digitalBrainNodes = null;
 let eyeVasculatureGroup = null, eyeArteryLines = null, eyeVeinLines = null;
+let cardiacValveGroup = null, valveLeaflets = [], bloodFlowPoints = null, bloodFlowMeta = null;
 let lastInferMs = 14.5;
 try {
   const [metaRes, binRes] = await Promise.all([
@@ -133,6 +135,7 @@ function updateUILanguage() {
   setTxt("ui_ck_ecg", t.ck_ecg);
   setTxt("ui_ck_alveolar", t.ck_alveolar);
   setTxt("ui_ck_cardiac_valves", t.ck_cardiac_valves);
+  setTxt("ui_ck_cutaway", t.ck_cutaway);
   setTxt("ui_btn_flow_video", t.btn_flow_video);
   setTxt("ui_flow_modal_title", t.flow_modal_title);
   setTxt("ui_ergo_cobb_lbl", t.ergo_cobb_lbl);
@@ -166,7 +169,7 @@ const DEFAULTS = {
   skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false, vessels: true,
   eyes: true, eye_vessels: true, fundusHud: true, outline: true, hands: true,
   ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true, region: "auto",
-  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true, alveolarHud: true, cardiacValvesHud: true,
+  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true, alveolarHud: true, cardiacValvesHud: true, heartCutaway: true,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
   fs: 1, fw: 1, fh: 1, fd: 1, fx: 0, fy: 0, fz: 0, labels: false,
   lang: "both", ergo: true, ergoAudio: true
@@ -193,6 +196,7 @@ function syncUI() {
   if ($("ecg_hud")) $("ecg_hud").checked = S.ecgHud;
   if ($("alveolar_hud")) $("alveolar_hud").checked = S.alveolarHud;
   if ($("cardiac_valves_hud")) $("cardiac_valves_hud").checked = S.cardiacValvesHud;
+  if ($("heart_cutaway")) $("heart_cutaway").checked = S.heartCutaway;
   if ($("heart_sound")) $("heart_sound").checked = S.heartAudio;
   if ($("helical_twist")) $("helical_twist").checked = S.twist;
   for (const k of SLIDERS) { const el = $(k); if (el) el.value = S[k]; }
@@ -229,6 +233,7 @@ if ($("rppg_enable")) $("rppg_enable").onchange = e => { S.rppg = e.target.check
 if ($("ecg_hud")) $("ecg_hud").onchange = e => { S.ecgHud = e.target.checked; save(); };
 if ($("alveolar_hud")) $("alveolar_hud").onchange = e => { S.alveolarHud = e.target.checked; save(); };
 if ($("cardiac_valves_hud")) $("cardiac_valves_hud").onchange = e => { S.cardiacValvesHud = e.target.checked; save(); };
+if ($("heart_cutaway")) $("heart_cutaway").onchange = e => { S.heartCutaway = e.target.checked; save(); applyStyle(); };
 const FLOW_MEDIA_ITEMS = {
   breathing: {
     src: "assets/media/breathing_animation.mp4",
@@ -356,6 +361,7 @@ function makeMat(xray, solid, mode) {
   return new THREE.ShaderMaterial({
     uniforms: { uColor: { value: new THREE.Color(xray) }, uSolidColor: { value: new THREE.Color(solid) },
                 uOpacity: { value: 1 }, uGain: { value: 1 }, uMode: { value: mode || 0 }, uOrtho: { value: 0 }, uFade: { value: 0 }, uFeather: { value: 0 }, uCutSoft: { value: 0 },
+                uSpec: { value: 0.45 }, uFibers: { value: 0.0 }, uAlphaMul: { value: 1.0 },
                 uClipOn: { value: 0 }, uClip: { value: new THREE.Vector4(1, 0, 0, 0) }, uToHead: { value: new THREE.Matrix4() } },
     vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, transparent: true,
     depthTest: false, depthWrite: false, blending: mode === 2 ? THREE.NormalBlending : THREE.AdditiveBlending
@@ -477,10 +483,57 @@ function buildScene() {
   const { airwayGeo, diaphragmGeo } = buildAirwayAndDiaphragm();
   add("airway", airwayGeo, "lungs", 0x7dd3fc, 0xe2e8f0, 3, bodyGroup);
   add("diaphragm", diaphragmGeo, "lungs", 0xfb7185, 0xc94c5b, 3, bodyGroup);
+  const alveoliGeo = buildAlveolarClusters();
+  add("alveoli", alveoliGeo, "lungs", 0x5eead4, 0xfda4af, 3, bodyGroup);
 
   // 4. Realistic 4-Chamber Heart & Great Vessels (Apex & Aorta at subject's left)
   const heartGeo = buildRealisticHeartGeometry();
   heartGroup = add("heart", heartGeo, "heart", 0xff3b5c, 0xb53545, 4, bodyGroup);
+
+  // 4b. 3D Cutaway Cardiac Septum, Moving 3D Valves & Blood Flow Particles (Google Flow Realism)
+  const cFlow = buildCardiacValvesAndFlow();
+  bloodFlowMeta = cFlow;
+  cardiacValveGroup = new THREE.Group();
+  const septumMesh = new THREE.Mesh(cFlow.structGeo, makeMat(0xff8fa3, 0xd94862));
+  septumMesh.renderOrder = 5; septumMesh.frustumCulled = false;
+  cardiacValveGroup.add(septumMesh);
+
+  valveLeaflets = [];
+  const leafletMat = makeMat(0xfef08a, 0xfde047);
+  for (const vp of cFlow.valvePositions) {
+    const vGrp = new THREE.Group();
+    vGrp.position.set(vp.pos[0], vp.pos[1], vp.pos[2]);
+    const leafA = new THREE.Mesh(cFlow.leafletGeo, leafletMat);
+    const leafB = new THREE.Mesh(cFlow.leafletGeo, leafletMat);
+    leafB.rotation.y = Math.PI;
+    leafA.renderOrder = 6; leafB.renderOrder = 6;
+    leafA.frustumCulled = false; leafB.frustumCulled = false;
+    vGrp.add(leafA); vGrp.add(leafB);
+    cardiacValveGroup.add(vGrp);
+    valveLeaflets.push({ kind: vp.kind, leafA, leafB });
+  }
+
+  const TOTAL_RBC = 120;
+  const rbcPos = new Float32Array(TOTAL_RBC * 3);
+  const rbcCol = new Float32Array(TOTAL_RBC * 3);
+  for (let i = 0; i < TOTAL_RBC; i++) {
+    const isOx = i >= 60;
+    rbcCol[i * 3] = isOx ? 1.0 : 0.22;
+    rbcCol[i * 3 + 1] = isOx ? 0.18 : 0.74;
+    rbcCol[i * 3 + 2] = isOx ? 0.32 : 0.98;
+  }
+  const rbcGeo = new THREE.BufferGeometry();
+  rbcGeo.setAttribute("position", new THREE.BufferAttribute(rbcPos, 3));
+  rbcGeo.setAttribute("color", new THREE.BufferAttribute(rbcCol, 3));
+  const rbcMat = new THREE.PointsMaterial({
+    size: 5.5, sizeAttenuation: false, vertexColors: true,
+    transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+  });
+  bloodFlowPoints = new THREE.Points(rbcGeo, rbcMat);
+  bloodFlowPoints.renderOrder = 7; bloodFlowPoints.frustumCulled = false;
+  cardiacValveGroup.add(bloodFlowPoints);
+  cardiacValveGroup.visible = !!(S.heart && S.heartCutaway);
+  heartGroup.add(cardiacValveGroup);
 
   // 5. Full Body Skeleton: Axial (Lumbar spine & pelvis) + Articulated Limbs
   const skelParts = buildSkeletonParts();
@@ -547,11 +600,20 @@ function eachMat(fn) {
 function applyStyle() {
   if (!renderer) return;
   const solid = S.style === "solid";
+  const cutaway = !!S.heartCutaway;
   eachMat((m, info) => {
     if (info.fixedMode !== undefined) return;
+    if (!m.uniforms) return;
     m.uniforms.uMode.value = solid ? 1 : 0;
+    const isSoftOrgan = info.layer === "heart" || info.layer === "lungs" || info.layer === "brain" || info.layer === "muscles";
+    if (m.uniforms.uFibers) m.uniforms.uFibers.value = isSoftOrgan ? 0.85 : 0.15;
+    if (m.uniforms.uSpec) m.uniforms.uSpec.value = isSoftOrgan ? 0.65 : 0.25;
+    const isCutawayShell = cutaway && (info.mesh === meshes.heart?.mesh || info.mesh === meshes.lungs?.mesh);
+    if (m.uniforms.uAlphaMul) m.uniforms.uAlphaMul.value = (solid && isCutawayShell) ? (info.mesh === meshes.lungs?.mesh ? 0.36 : 0.32) : 1.0;
     m.blending = solid ? THREE.NormalBlending : THREE.AdditiveBlending;
-    m.depthTest = solid; m.depthWrite = solid; m.needsUpdate = true;
+    m.depthTest = solid;
+    m.depthWrite = solid && !isCutawayShell;
+    m.needsUpdate = true;
   });
 }
 
@@ -1527,6 +1589,42 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
     // Acoustically accurate S1 ("Lub" - AV valves snap shut) & S2 ("Dub" - Semilunar valves close)
     if (wState.triggerS1) playS1(S.heartAudio);
     if (wState.triggerS2) playS2(S.heartAudio);
+
+    // 3D Cutaway Moving Heart Valves & Flowing Blood Cells (Zero-GC)
+    if (cardiacValveGroup) {
+      cardiacValveGroup.visible = !!(S.heart && S.heartCutaway);
+      if (cardiacValveGroup.visible) {
+        const ph = wState.phase || 0;
+        const avAngle = (ph < 0.21 || ph >= 0.56) ? 0.85 : 0.04;
+        const slAngle = (ph >= 0.25 && ph < 0.50) ? -0.85 : -0.04;
+        for (let i = 0; i < valveLeaflets.length; i++) {
+          const vl = valveLeaflets[i];
+          const ang = vl.kind === "av" ? avAngle : slAngle;
+          vl.leafA.rotation.x = ang;
+          vl.leafB.rotation.x = ang;
+        }
+        if (bloodFlowPoints && bloodFlowMeta) {
+          const posArr = bloodFlowPoints.geometry.attributes.position.array;
+          const samples = bloodFlowMeta.samples;
+          const deox = bloodFlowMeta.deoxPath;
+          const ox = bloodFlowMeta.oxPath;
+          const flowBase = (now / 1000) * ((S.bpm || 75) / 60) * 0.55;
+          for (let i = 0; i < 60; i++) {
+            const idxD = Math.floor(((flowBase + i / 60) % 1) * (samples - 1)) * 3;
+            posArr[i * 3] = deox[idxD];
+            posArr[i * 3 + 1] = deox[idxD + 1];
+            posArr[i * 3 + 2] = deox[idxD + 2];
+
+            const j = i + 60;
+            const idxO = Math.floor(((flowBase + 0.15 + i / 60) % 1) * (samples - 1)) * 3;
+            posArr[j * 3] = ox[idxO];
+            posArr[j * 3 + 1] = ox[idxO + 1];
+            posArr[j * 3 + 2] = ox[idxO + 2];
+          }
+          bloodFlowPoints.geometry.attributes.position.needsUpdate = true;
+        }
+      }
+    }
   }
   if (S.vessels && meshes.vessels_art_axial && meshes.vessels_art_axial.mesh.material.uniforms && meshes.vessels_art_axial.mesh.material.uniforms.uGain) {
     meshes.vessels_art_axial.mesh.material.uniforms.uGain.value = (S.style === "solid" ? 1.0 : S.bright) * (0.95 + 0.45 * (wState.aortaPulse || 0));
@@ -1546,6 +1644,12 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
     }
     if (meshes.airway && meshes.airway.mesh.material.uniforms && meshes.airway.mesh.material.uniforms.uGain) {
       meshes.airway.mesh.material.uniforms.uGain.value = (S.style === "solid" ? 1.0 : S.bright) * (0.9 + 0.35 * breath);
+    }
+    if (meshes.alveoli) {
+      meshes.alveoli.mesh.visible = !!(S.lungs && S.heartCutaway);
+      if (meshes.alveoli.mesh.visible) {
+        meshes.alveoli.mesh.scale.set(1 + breath * 0.10, 1 + breath * 0.08, 1 + breath * 0.10);
+      }
     }
     if (meshes.ribs && S.ribs) {
       meshes.ribs.mesh.scale.set(1 + breath * 0.03, 1 + breath * 0.02, 1 + breath * 0.035);
