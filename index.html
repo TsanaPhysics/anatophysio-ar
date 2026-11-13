@@ -225,10 +225,11 @@
             <label class="ck"><input type="checkbox" id="helical_twist" checked><span id="ui_ck_twist">บิดเกลียว Apex Twist</span></label>
             <label class="ck"><input type="checkbox" id="ecg_hud" checked><span id="ui_ck_ecg">คลื่นหัวใจ Lead II (ECG HUD)</span></label>
             <label class="ck"><input type="checkbox" id="alveolar_hud" checked><span id="ui_ck_alveolar">🫁 แลกเปลี่ยนแก๊สถุงลม (Alveoli HUD)</span></label>
+            <label class="ck"><input type="checkbox" id="cardiac_valves_hud" checked><span id="ui_ck_cardiac_valves">🫀 ลิ้นหัวใจ 4 ห้อง (Valves HUD)</span></label>
           </div>
           <div style="margin-top:10px">
             <button id="btn_flow_video" type="button" style="width:100%; padding:9px 12px; background:linear-gradient(135deg, #0d9488, #0f766e); color:#fff; border:0; border-radius:8px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(13,148,136,0.35); display:flex; align-items:center; justify-content:center; gap:8px; font-size:12px;">
-              <span>🎬</span> <span id="ui_btn_flow_video">แอนิเมชันการหายใจ 3D (Google Flow Media)</span>
+              <span>🎬</span> <span id="ui_btn_flow_video">คลังวิดีโอแอนิเมชัน 3D (Google Flow: 6 เรื่อง)</span>
             </button>
           </div>
         </div>
@@ -277,18 +278,26 @@
   </aside>
 </div>
 
-<!-- Google Flow Breathing Animation Modal -->
-<div id="flow_media_modal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(2,6,23,0.86); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:18px;">
-  <div style="width:min(760px, 100%); background:#0f172a; border:1px solid rgba(45,212,191,0.35); border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,0.65); overflow:hidden;">
+<!-- Google Flow Medical Animation Gallery Modal -->
+<div id="flow_media_modal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(2,6,23,0.88); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:18px;">
+  <div style="width:min(820px, 100%); background:#0f172a; border:1px solid rgba(45,212,191,0.35); border-radius:14px; box-shadow:0 20px 50px rgba(0,0,0,0.65); overflow:hidden;">
     <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(148,163,184,0.18); background:rgba(15,23,42,0.95);">
       <div style="font-weight:700; color:#5eead4; font-size:14px; display:flex; align-items:center; gap:8px;">
         <span>🎬</span>
-        <span id="ui_flow_modal_title">แอนิเมชันกระบวนการหายใจและแลกเปลี่ยนแก๊ส (Google Flow 3D Media)</span>
+        <span id="ui_flow_modal_title">คลังวิดีโอแอนิเมชันการแพทย์ 3D (Google Flow: 6 เรื่อง)</span>
       </div>
       <button id="btn_close_flow_modal" type="button" style="background:rgba(255,255,255,0.08); color:#e2e8f0; border:1px solid rgba(148,163,184,0.25); border-radius:6px; padding:4px 10px; cursor:pointer; font-weight:700;">✕</button>
     </div>
-    <div style="padding:14px 16px;">
-      <video id="flow_video_player" controls loop playsinline style="width:100%; max-height:62vh; border-radius:10px; background:#020617; display:block;" src="assets/media/breathing_animation.mp4"></video>
+    <div style="padding:12px 16px;">
+      <div id="flow_gallery_tabs" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+        <button type="button" class="flow-tab-btn" data-flow-id="breathing" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(45,212,191,0.5); background:rgba(13,148,136,0.3); color:#5eead4; font-size:11.5px; font-weight:700; cursor:pointer;">🫁 การหายใจ &amp; ถุงลม</button>
+        <button type="button" class="flow-tab-btn" data-flow-id="heart_4chamber" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(148,163,184,0.25); background:rgba(30,41,59,0.7); color:#cbd5e1; font-size:11.5px; font-weight:600; cursor:pointer;">🫀 หัวใจ 4 ห้อง &amp; ลิ้นหัวใจ</button>
+        <button type="button" class="flow-tab-btn" data-flow-id="heart_ra" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(148,163,184,0.25); background:rgba(30,41,59,0.7); color:#cbd5e1; font-size:11.5px; font-weight:600; cursor:pointer;">🔵 ห้องบนขวา (RA)</button>
+        <button type="button" class="flow-tab-btn" data-flow-id="heart_rv" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(148,163,184,0.25); background:rgba(30,41,59,0.7); color:#cbd5e1; font-size:11.5px; font-weight:600; cursor:pointer;">🔵 ห้องล่างขวา (RV)</button>
+        <button type="button" class="flow-tab-btn" data-flow-id="heart_la" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(148,163,184,0.25); background:rgba(30,41,59,0.7); color:#cbd5e1; font-size:11.5px; font-weight:600; cursor:pointer;">🔴 ห้องบนซ้าย (LA)</button>
+        <button type="button" class="flow-tab-btn" data-flow-id="heart_lv" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(148,163,184,0.25); background:rgba(30,41,59,0.7); color:#cbd5e1; font-size:11.5px; font-weight:600; cursor:pointer;">🔴 ห้องล่างซ้าย (LV)</button>
+      </div>
+      <video id="flow_video_player" controls loop playsinline style="width:100%; max-height:56vh; border-radius:10px; background:#020617; display:block;" src="assets/media/breathing_animation.mp4"></video>
       <div id="ui_flow_modal_desc" style="margin-top:10px; font-size:12px; color:#cbd5e1; line-height:1.5;">
         <b>แนวคิดทางการแพทย์ (Google Flow):</b> แสดงการทำงานประสานกันของหลอดลม (Trachea &amp; Bronchi) การขยายตัวของปอด การหดตัว-คลายตัวของกะบังลม (Diaphragm Dome) และการแพร่ของแก๊ส O₂ / CO₂ ในระดับถุงลมปอด (Alveolar Gas Exchange) ซึ่งเชื่อมโยงกับแบบจำลอง 3 มิติแบบเรียลไทม์ใน AnatoPhysio AR
       </div>

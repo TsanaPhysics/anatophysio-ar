@@ -132,6 +132,7 @@ function updateUILanguage() {
   setTxt("ui_ck_rppg", t.ck_rppg);
   setTxt("ui_ck_ecg", t.ck_ecg);
   setTxt("ui_ck_alveolar", t.ck_alveolar);
+  setTxt("ui_ck_cardiac_valves", t.ck_cardiac_valves);
   setTxt("ui_btn_flow_video", t.btn_flow_video);
   setTxt("ui_flow_modal_title", t.flow_modal_title);
   setTxt("ui_ergo_cobb_lbl", t.ergo_cobb_lbl);
@@ -165,7 +166,7 @@ const DEFAULTS = {
   skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false, vessels: true,
   eyes: true, eye_vessels: true, fundusHud: true, outline: true, hands: true,
   ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true, region: "auto",
-  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true, alveolarHud: true,
+  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true, alveolarHud: true, cardiacValvesHud: true,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
   fs: 1, fw: 1, fh: 1, fd: 1, fx: 0, fy: 0, fz: 0, labels: false,
   lang: "both", ergo: true, ergoAudio: true
@@ -191,6 +192,7 @@ function syncUI() {
   if ($("rppg_enable")) $("rppg_enable").checked = S.rppg;
   if ($("ecg_hud")) $("ecg_hud").checked = S.ecgHud;
   if ($("alveolar_hud")) $("alveolar_hud").checked = S.alveolarHud;
+  if ($("cardiac_valves_hud")) $("cardiac_valves_hud").checked = S.cardiacValvesHud;
   if ($("heart_sound")) $("heart_sound").checked = S.heartAudio;
   if ($("helical_twist")) $("helical_twist").checked = S.twist;
   for (const k of SLIDERS) { const el = $(k); if (el) el.value = S[k]; }
@@ -226,12 +228,70 @@ $("ergo_audio").onchange = e => { S.ergoAudio = e.target.checked; save(); };
 if ($("rppg_enable")) $("rppg_enable").onchange = e => { S.rppg = e.target.checked; save(); };
 if ($("ecg_hud")) $("ecg_hud").onchange = e => { S.ecgHud = e.target.checked; save(); };
 if ($("alveolar_hud")) $("alveolar_hud").onchange = e => { S.alveolarHud = e.target.checked; save(); };
+if ($("cardiac_valves_hud")) $("cardiac_valves_hud").onchange = e => { S.cardiacValvesHud = e.target.checked; save(); };
+const FLOW_MEDIA_ITEMS = {
+  breathing: {
+    src: "assets/media/breathing_animation.mp4",
+    th: "<b>การหายใจ & ถุงลม (Human Breathing):</b> แสดงการทำงานประสานกันของหลอดลม (Trachea & Bronchi) การขยายตัวของปอด กะบังลม (Diaphragm Dome) และการแพร่แก๊ส O₂ / CO₂ ในถุงลมปอด",
+    en: "<b>Human Breathing Process:</b> Demonstrates trachea/bronchi airflow, bilateral lung expansion, diaphragm dome contraction, and alveolar O₂ / CO₂ gas exchange."
+  },
+  heart_4chamber: {
+    src: "assets/media/heart_4chamber.mp4",
+    th: "<b>หัวใจ 4 ห้องและลิ้นหัวใจ (Macroscopic 4-Chamber View):</b> แสดงการทำงานประสานกันของหัวใจทั้ง 4 ห้อง หลอดเลือดใหญ่ (Aorta, Pulmonary Artery/Veins, Vena Cava) และลิ้นหัวใจทั้ง 4 ลิ้น",
+    en: "<b>Macroscopic 4-Chamber Heart:</b> Demonstrates coordinated contraction of all four chambers, major great vessels, and opening/closing of all four heart valves."
+  },
+  heart_ra: {
+    src: "assets/media/heart_right_atrium.mp4",
+    th: "<b>หัวใจห้องบนขวา (Right Atrium):</b> รับเลือดดำ (Deoxygenated Blood) จาก Superior & Inferior Vena Cava แล้วบีบตัวส่งผ่านลิ้นหัวใจ Tricuspid ลงสู่ห้องล่างขวา",
+    en: "<b>Right Atrium (RA):</b> Receives deoxygenated venous blood from the superior & inferior vena cava and contracts to fill the right ventricle."
+  },
+  heart_rv: {
+    src: "assets/media/heart_right_ventricle.mp4",
+    th: "<b>หัวใจห้องล่างขวา (Right Ventricle):</b> รับเลือดดำผ่านลิ้น Tricuspid แล้วบีบตัวส่งผ่านลิ้น Pulmonary Valve เข้าสู่ Pulmonary Artery เพื่อไปฟอกที่ปอด",
+    en: "<b>Right Ventricle (RV):</b> Fills via the tricuspid valve and pumps deoxygenated blood through the pulmonary valve toward the lungs."
+  },
+  heart_la: {
+    src: "assets/media/heart_left_atrium.mp4",
+    th: "<b>หัวใจห้องบนซ้าย (Left Atrium):</b> รับเลือดแดงที่มีออกซิเจนสูงจาก Pulmonary Veins ทั้ง 4 เส้น แล้วส่งผ่านลิ้น Mitral (Bicuspid) ลงสู่ห้องล่างซ้าย",
+    en: "<b>Left Atrium (LA):</b> Receives oxygenated blood from the pulmonary veins and delivers it across the mitral valve into the left ventricle."
+  },
+  heart_lv: {
+    src: "assets/media/heart_left_ventricle.mp4",
+    th: "<b>หัวใจห้องล่างซ้าย (Left Ventricle):</b> ผนังกล้ามเนื้อหนาที่สุด บีบตัวทรงพลัง (Helical Twist) ส่งเลือดแดงผ่านลิ้น Aortic Valve เข้าสู่ Aorta เลี้ยงทั่วร่างกาย",
+    en: "<b>Left Ventricle (LV):</b> Thick muscular chamber contracting powerfully to eject oxygenated blood through the aortic valve into the systemic aorta."
+  }
+};
 if ($("btn_flow_video") && $("flow_media_modal")) {
   const modal = $("flow_media_modal");
   const vid = $("flow_video_player");
+  const desc = $("ui_flow_modal_desc");
+  const selectFlowMedia = (id) => {
+    const item = FLOW_MEDIA_ITEMS[id] || FLOW_MEDIA_ITEMS.breathing;
+    if (vid) {
+      vid.src = item.src;
+      vid.currentTime = 0;
+      vid.play().catch(() => {});
+    }
+    if (desc) desc.innerHTML = S.lang === "en" ? item.en : item.th;
+    const tabs = $("flow_gallery_tabs");
+    if (tabs) {
+      for (const b of tabs.querySelectorAll(".flow-tab-btn")) {
+        const active = b.dataset.flowId === id;
+        b.style.borderColor = active ? "rgba(45,212,191,0.75)" : "rgba(148,163,184,0.25)";
+        b.style.background = active ? "rgba(13,148,136,0.35)" : "rgba(30,41,59,0.7)";
+        b.style.color = active ? "#5eead4" : "#cbd5e1";
+      }
+    }
+  };
+  const tabs = $("flow_gallery_tabs");
+  if (tabs) {
+    for (const b of tabs.querySelectorAll(".flow-tab-btn")) {
+      b.onclick = () => selectFlowMedia(b.dataset.flowId);
+    }
+  }
   $("btn_flow_video").onclick = () => {
     modal.style.display = "flex";
-    if (vid) { vid.currentTime = 0; vid.play().catch(() => {}); }
+    selectFlowMedia("breathing");
   };
   const closeModal = () => {
     modal.style.display = "none";
@@ -1087,6 +1147,109 @@ function drawAlveolarHUD(g, now, breath, respRate) {
   g.restore();
 }
 
+function drawCardiacValvesHUD(g, now, wState) {
+  const boxW = Math.min(270, W * 0.44), boxH = 104;
+  const bx = W - boxW - 14, by = H - 76 - 16 - boxH - 10;
+  const phase = wState.phase || 0;
+  const avOpen = phase < 0.21 || phase >= 0.56;
+  const slOpen = phase >= 0.25 && phase < 0.50;
+  const t = now / 1000;
+
+  g.save();
+  g.fillStyle = "rgba(10, 14, 24, 0.90)";
+  g.strokeStyle = "rgba(255, 77, 104, 0.45)";
+  g.lineWidth = 1;
+  const r = 8;
+  g.beginPath();
+  g.moveTo(bx + r, by); g.lineTo(bx + boxW - r, by); g.quadraticCurveTo(bx + boxW, by, bx + boxW, by + r);
+  g.lineTo(bx + boxW, by + boxH - r); g.quadraticCurveTo(bx + boxW, by + boxH, bx + boxW - r, by + boxH);
+  g.lineTo(bx + r, by + boxH); g.quadraticCurveTo(bx, by + boxH, bx, by + boxH - r);
+  g.lineTo(bx, by + r); g.quadraticCurveTo(bx, by, bx + r, by);
+  g.closePath();
+  g.fill(); g.stroke();
+
+  // 4-Chamber Mini Schematic (left side of box, anatomical orientation)
+  const cx = bx + 44, cy = by + 54;
+  const chW = 24, chH = 26;
+  const beatScale = 0.88 + 0.12 * (wState.ventricleVolume || 1.0);
+
+  // Right Atrium (screen-left top) & Right Ventricle (screen-left bottom) - Deoxygenated
+  g.fillStyle = "rgba(56, 189, 248, 0.25)";
+  g.strokeStyle = "#38bdf8";
+  g.lineWidth = 1.4;
+  g.fillRect(cx - chW - 2, cy - chH - 2, chW, chH * 0.72);
+  g.strokeRect(cx - chW - 2, cy - chH - 2, chW, chH * 0.72);
+  g.fillRect(cx - chW * beatScale - 2, cy - 4, chW * beatScale, chH * beatScale);
+  g.strokeRect(cx - chW * beatScale - 2, cy - 4, chW * beatScale, chH * beatScale);
+
+  // Left Atrium (screen-right top) & Left Ventricle (screen-right bottom) - Oxygenated
+  g.fillStyle = "rgba(255, 59, 92, 0.28)";
+  g.strokeStyle = "#ff4d68";
+  g.fillRect(cx + 2, cy - chH - 2, chW, chH * 0.72);
+  g.strokeRect(cx + 2, cy - chH - 2, chW, chH * 0.72);
+  g.fillRect(cx + 2, cy - 4, chW * beatScale, chH * beatScale);
+  g.strokeRect(cx + 2, cy - 4, chW * beatScale, chH * beatScale);
+
+  // Chamber Labels
+  g.font = "700 8.5px system-ui,-apple-system,sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillStyle = "#bae6fd";
+  g.fillText("RA", cx - chW * 0.5 - 2, cy - chH * 0.64);
+  g.fillText("RV", cx - chW * 0.5 - 2, cy + chH * 0.42);
+  g.fillStyle = "#fecdd3";
+  g.fillText("LA", cx + chW * 0.5 + 2, cy - chH * 0.64);
+  g.fillText("LV", cx + chW * 0.5 + 2, cy + chH * 0.42);
+
+  // AV Valves (Tricuspid & Mitral) Leaflet Indicators
+  g.strokeStyle = avOpen ? "#4ade80" : "#facc15";
+  g.lineWidth = 2.2;
+  const avDrop = avOpen ? 5 : 0;
+  g.beginPath();
+  g.moveTo(cx - chW + 2, cy - 5); g.lineTo(cx - chW * 0.5 - 2, cy - 5 + avDrop);
+  g.moveTo(cx - 4, cy - 5); g.lineTo(cx - chW * 0.5 - 2, cy - 5 + avDrop);
+  g.moveTo(cx + 4, cy - 5); g.lineTo(cx + chW * 0.5 + 2, cy - 5 + avDrop);
+  g.moveTo(cx + chW - 2, cy - 5); g.lineTo(cx + chW * 0.5 + 2, cy - 5 + avDrop);
+  g.stroke();
+
+  // Animated Blood Flow Particles
+  const p = (t * ((S.bpm || 75) / 60)) % 1;
+  g.fillStyle = "#38bdf8";
+  g.beginPath();
+  g.arc(cx - chW * 0.5 - 2, (avOpen ? (cy - 18 + p * 26) : (cy + 8 - p * 18)), 2.3, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#ff4d68";
+  g.beginPath();
+  g.arc(cx + chW * 0.5 + 2, (avOpen ? (cy - 18 + p * 26) : (cy + 8 - p * 18)), 2.3, 0, Math.PI * 2);
+  g.fill();
+
+  // Telemetry & Valve Status (right side)
+  const tx = bx + 84;
+  g.font = "700 10.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#ff6b81";
+  g.textAlign = "left"; g.textBaseline = "top";
+  g.fillText("🫀 " + (S.lang === "en" ? "4-CHAMBER & VALVES" : "ลิ้นหัวใจและการไหลเวียน"), tx, by + 10);
+
+  g.font = "600 9.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = avOpen ? "#4ade80" : "#facc15";
+  g.fillText(`AV (Tricuspid/Mitral): ${avOpen ? "OPEN (Fill)" : "CLOSED (S1)"}`, tx, by + 28);
+
+  g.fillStyle = slOpen ? "#4ade80" : "#94a3b8";
+  g.fillText(`SL (Pulm./Aortic): ${slOpen ? "OPEN (Eject)" : "CLOSED (S2)"}`, tx, by + 44);
+
+  g.font = "500 9.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = "#eef2fa";
+  const sv = Math.round(70 * (1.15 - (wState.ventricleVolume || 0.7) * 0.3));
+  g.fillText(`EF: ~62%  |  SV: ${sv} mL  |  CO: ${((sv * (S.bpm || 75)) / 1000).toFixed(1)} L/m`, tx, by + 61);
+
+  g.font = "600 9.5px system-ui,-apple-system,sans-serif";
+  g.fillStyle = slOpen ? "#ff4d68" : "#38bdf8";
+  g.fillText(slOpen
+    ? (S.lang === "en" ? "● SYSTOLE: Ventricular Ejection ↑" : "● บีบตัว: ส่งเลือดออก Aorta/Pulm ↑")
+    : (S.lang === "en" ? "● DIASTOLE: Chamber Filling ↓" : "● คลายตัว: เลือดไหลเข้า 4 ห้อง ↓"), tx, by + 79);
+
+  g.restore();
+}
+
 function drawECGHUD(g, wState, rppgRes) {
   if (!S.ecgHud) return;
   const boxW = Math.min(270, W * 0.44), boxH = 76;
@@ -1365,6 +1528,9 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
     if (wState.triggerS1) playS1(S.heartAudio);
     if (wState.triggerS2) playS2(S.heartAudio);
   }
+  if (S.vessels && meshes.vessels_art_axial && meshes.vessels_art_axial.mesh.material.uniforms && meshes.vessels_art_axial.mesh.material.uniforms.uGain) {
+    meshes.vessels_art_axial.mesh.material.uniforms.uGain.value = (S.style === "solid" ? 1.0 : S.bright) * (0.95 + 0.45 * (wState.aortaPulse || 0));
+  }
 
   // 2. Respiratory Cycle (Lungs, Airway Tree, Diaphragm Dome & Thoracic expansion)
   const respRate = S.resp || 15;
@@ -1423,6 +1589,7 @@ function renderFrame(now, faceLms, hands, sides, poseData, rppgLatest) {
   if (lens) { g.strokeStyle = "rgba(127,209,255,.8)"; g.lineWidth = 2; g.beginPath(); g.arc(lens.x, lens.y, lens.r, 0, 6.3); g.stroke(); }
   if (S.labels) drawLabels(g, lens);
   drawECGHUD(g, wState, rppgLatest);
+  if (S.cardiacValvesHud && S.heart) drawCardiacValvesHUD(g, now, wState);
   if (S.deep_learning) drawDeepLearningHUD(g, now, lastInferMs);
   if (S.fundusHud && (S.eye_vessels || S.eyes)) drawFundusHUD(g, now);
   if (S.alveolarHud && S.lungs) drawAlveolarHUD(g, now, breath, respRate);
