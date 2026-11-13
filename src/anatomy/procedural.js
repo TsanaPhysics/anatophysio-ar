@@ -46,92 +46,236 @@ export function mergeGeos(list) {
   return merged;
 }
 
+/**
+ * Custom anatomical bone lofting builder along a 3D CatmullRomCurve3.
+ * Uses parallel transport frames to prevent twisting and supports non-uniform
+ * cross-sections (epiphyseal flares, condyles, bone crests, and flat blades).
+ */
+export function buildLoftedBone(points, profileFn, segsL = 22, segsR = 14, closedEnds = true) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  const positions = [];
+  const indices = [];
+
+  let tan = curve.getTangentAt(0).normalize();
+  const ref = Math.abs(tan.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  const norm = new THREE.Vector3().crossVectors(tan, ref).normalize();
+  const binorm = new THREE.Vector3().crossVectors(tan, norm).normalize();
+
+  for (let i = 0; i <= segsL; i++) {
+    const t = i / segsL;
+    const pos = curve.getPointAt(t);
+    const nextTan = curve.getTangentAt(t).normalize();
+
+    const dot = Math.max(-1, Math.min(1, tan.dot(nextTan)));
+    if (dot < 0.9999) {
+      const axis = new THREE.Vector3().crossVectors(tan, nextTan);
+      if (axis.lengthSq() > 1e-8) {
+        axis.normalize();
+        norm.applyAxisAngle(axis, Math.acos(dot)).normalize();
+      }
+    }
+    tan = nextTan;
+    binorm.crossVectors(tan, norm).normalize();
+
+    for (let j = 0; j < segsR; j++) {
+      const theta = (j / segsR) * Math.PI * 2;
+      const prof = profileFn(t, theta);
+      const rx = typeof prof === "number" ? prof : prof.rx;
+      const ry = typeof prof === "number" ? prof : prof.ry;
+
+      const c = Math.cos(theta) * rx;
+      const s = Math.sin(theta) * ry;
+      positions.push(
+        pos.x + norm.x * c + binorm.x * s,
+        pos.y + norm.y * c + binorm.y * s,
+        pos.z + norm.z * c + binorm.z * s
+      );
+    }
+  }
+
+  for (let i = 0; i < segsL; i++) {
+    const row1 = i * segsR;
+    const row2 = (i + 1) * segsR;
+    for (let j = 0; j < segsR; j++) {
+      const nextJ = (j + 1) % segsR;
+      const a = row1 + j, b = row1 + nextJ, c = row2 + nextJ, d = row2 + j;
+      indices.push(a, b, c, a, c, d);
+    }
+  }
+
+  if (closedEnds) {
+    const pStart = curve.getPointAt(0);
+    const startIdx = positions.length / 3;
+    positions.push(pStart.x, pStart.y, pStart.z);
+    for (let j = 0; j < segsR; j++) indices.push(startIdx, (j + 1) % segsR, j);
+
+    const pEnd = curve.getPointAt(1);
+    const endIdx = positions.length / 3;
+    positions.push(pEnd.x, pEnd.y, pEnd.z);
+    const lastRow = segsL * segsR;
+    for (let j = 0; j < segsR; j++) indices.push(endIdx, lastRow + j, lastRow + ((j + 1) % segsR));
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Helper to construct a high-fidelity anatomical vertebra with kidney-shaped
+ * concave-waisted body, intervertebral disc, neural arch, transverse & spinous processes.
+ */
+function addVertebra(geos, y, z, r, h, spinLen, spinTilt, tpWidth) {
+  // Concave-waisted kidney-shaped vertebral body
+  const body = buildLoftedBone(
+    [new THREE.Vector3(0, y + h * 0.48, z), new THREE.Vector3(0, y, z), new THREE.Vector3(0, y - h * 0.48, z)],
+    (t, th) => {
+      const waist = 1.0 - 0.14 * Math.sin(t * Math.PI);
+      const kidney = 1.0 - 0.15 * Math.exp(-Math.pow(Math.sin(th) + 1.0, 2)); // posterior spinal canal notch
+      return { rx: r * 1.15 * waist * kidney, ry: r * 0.88 * waist * kidney };
+    },
+    6, 14, true
+  );
+  geos.push(body);
+
+  // Spinous process (tapered, angled posteriorly and inferiorly)
+  const spinPts = [
+    new THREE.Vector3(0, y + 0.1, z - r * 0.8),
+    new THREE.Vector3(0, y - spinTilt * 0.5, z - r * 0.8 - spinLen * 0.5),
+    new THREE.Vector3(0, y - spinTilt, z - r * 0.8 - spinLen)
+  ];
+  const spin = buildLoftedBone(spinPts, (t) => ({
+    rx: 0.22 * (1 - 0.45 * t),
+    ry: 0.36 * (1 - 0.3 * t)
+  }), 5, 8, true);
+  geos.push(spin);
+
+  // Bilateral pedicles & transverse processes
+  for (const side of [-1, 1]) {
+    const tpPts = [
+      new THREE.Vector3(side * r * 0.65, y + 0.1, z - r * 0.4),
+      new THREE.Vector3(side * (r * 0.65 + tpWidth * 0.55), y + 0.15, z - r * 0.75),
+      new THREE.Vector3(side * (r * 0.65 + tpWidth), y + 0.1, z - r * 0.95)
+    ];
+    const tp = buildLoftedBone(tpPts, (t) => ({
+      rx: 0.28 * (1 + 0.2 * Math.sin(t * Math.PI)),
+      ry: 0.22 * (1 - 0.25 * t)
+    }), 5, 8, true);
+    geos.push(tp);
+  }
+}
+
 // ------------------------------ 1. Anatomical Bony Thorax Geometry ------------------------------
 export function buildBonyThoraxGeometry() {
   const geos = [];
 
-  // 1.1 Thoracic Vertebrae T1 to T12 with heart-shaped body, transverse processes & spinous process
-  for (let i = 0; i < 12; i++) {
-    const y = -14.2 - i * 1.35;
-    const z = -4.9;
-    const r = 1.35 + (i > 6 ? 0.35 : 0.0);
-
-    // Heart-shaped vertebral body
-    const body = new THREE.CylinderGeometry(r * 0.9, r, 1.05, 16);
-    body.rotateX(0.08);
-    body.translate(0, y, z);
-    geos.push(body);
-
-    // Spinous process angled postero-inferiorly
-    const spinLen = 1.8 + i * 0.1;
-    const spin = new THREE.BoxGeometry(0.45, 0.55, spinLen);
-    spin.rotateX(0.42 + i * 0.035);
-    spin.translate(0, y + 0.1, z - 1.1);
-    geos.push(spin);
-
-    // Transverse processes (bilateral wings for rib tubercle articulation)
-    for (const side of [-1, 1]) {
-      const tp = new THREE.BoxGeometry(1.4, 0.45, 0.5);
-      tp.rotateY(side * 0.35);
-      tp.translate(side * 1.8, y + 0.2, z - 0.4);
-      geos.push(tp);
-    }
+  // 1.0 Cervical Vertebrae C1-C7 (with physiological cervical lordosis connecting skull to T1)
+  for (let i = 0; i < 7; i++) {
+    const y = -5.6 - i * 1.15;
+    const lordosis = Math.sin((i / 6) * Math.PI) * 0.65;
+    const z = -4.9 + lordosis;
+    const r = 1.02 + i * 0.04;
+    addVertebra(geos, y, z, r, 0.85, 1.0 + i * 0.14, 0.35, 0.95);
   }
 
-  // 1.2 Flat Ribs (12 Pairs with anatomical flat ribbon profile and physiological drop/torsion)
+  // 1.1 Thoracic Vertebrae T1 to T12 with kidney-shaped body, neural arch, transverse & spinous processes
+  for (let i = 0; i < 12; i++) {
+    const y = -14.2 - i * 1.35;
+    const kyphosis = -Math.sin((i / 11) * Math.PI) * 0.95;
+    const z = -4.9 + kyphosis;
+    const r = 1.32 + (i > 6 ? 0.35 : i * 0.04);
+    addVertebra(geos, y, z, r, 1.05, 1.75 + i * 0.08, 0.85 + i * 0.04, 1.25);
+  }
+
+  // 1.2 Flat Ribbon Ribs (12 Pairs with true local elliptical cross-section, neck, costal angle & drop)
   for (let i = 0; i < 12; i++) {
     const vertY = -14.2 - i * 1.35;
-    const vertZ = -4.9;
+    const kyphosis = -Math.sin((i / 11) * Math.PI) * 0.95;
+    const vertZ = -4.9 + kyphosis;
     const spanFrac = Math.sin(((i + 1) / 13) * Math.PI);
     const halfWidth = 8.6 * spanFrac + 3.8;
     const dropY = -1.1 - i * 0.18;
 
-    // Rib thickness & width: 1st rib is broadest and flattest
-    const ribW = i === 0 ? 0.85 : 0.58;
-    const ribT = 0.25;
+    const ribH = i === 0 ? 0.58 : 0.44;
+    const ribT = 0.17;
 
     for (const side of [-1, 1]) {
-      const p0 = new THREE.Vector3(side * 1.4, vertY, vertZ);                              // Head at vertebra
-      const p1 = new THREE.Vector3(side * 3.2, vertY + 0.1, vertZ - 0.3);                  // Tubercle
-      const p2 = new THREE.Vector3(side * (halfWidth * 0.72), vertY - 0.45, vertZ - 0.3);  // Angle of rib
-      const p3 = new THREE.Vector3(side * halfWidth, vertY + dropY, 0.0);                  // Lateral shaft
-      const p4 = new THREE.Vector3(side * (halfWidth * 0.72), vertY + dropY - 1.3, 1.8);   // Anterior costochondral junction
+      const p0 = new THREE.Vector3(side * 1.35, vertY, vertZ);                              // Head at vertebra
+      const p1 = new THREE.Vector3(side * 3.1, vertY + 0.1, vertZ - 0.55);                  // Neck & Tubercle
+      const p2 = new THREE.Vector3(side * (halfWidth * 0.72), vertY - 0.45, vertZ - 0.65);  // Costal Angle
+      const p3 = new THREE.Vector3(side * halfWidth, vertY + dropY, 0.0);                   // Lateral shaft
+      const p4 = new THREE.Vector3(side * (halfWidth * 0.72), vertY + dropY - 1.3, 1.9);    // Costochondral junction
 
-      const pts = i >= 10 ? [p0, p1, p2, p3] : [p0, p1, p2, p3, p4]; // Floating ribs (11 & 12)
-      const curve = new THREE.CatmullRomCurve3(pts);
-
-      // Create flat rib using TubeGeometry with elliptical cross-section scaling
-      const tube = new THREE.TubeGeometry(curve, 18, (ribW + ribT) * 0.5, 8, false);
-      tube.scale(ribT / ((ribW + ribT) * 0.5), ribW / ((ribW + ribT) * 0.5), 1.0);
-      geos.push(tube);
+      const pts = i >= 10 ? [p0, p1, p2, p3] : [p0, p1, p2, p3, p4];
+      const rib = buildLoftedBone(pts, (t) => {
+        const neck = 1.0 - 0.18 * Math.exp(-Math.pow((t - 0.12) * 8, 2));
+        return { rx: ribT * neck, ry: ribH * neck };
+      }, 20, 10, true);
+      geos.push(rib);
     }
   }
 
-  // 1.3 Anatomical Sternum
-  // Manubrium with Suprasternal / Jugular notch
-  const man = new THREE.BoxGeometry(3.6, 3.2, 0.75);
-  man.translate(0, -15.2, 3.2);
-  geos.push(man);
+  // 1.3 Anatomical Sternum (Lofted Manubrium with jugular notch, Corpus sterni, Xiphoid)
+  const sternPts = [
+    new THREE.Vector3(0, -13.6, 3.3),  // Top of manubrium
+    new THREE.Vector3(0, -15.3, 3.1),  // Manubrium center
+    new THREE.Vector3(0, -17.0, 3.0),  // Sternal angle (Angle of Louis)
+    new THREE.Vector3(0, -21.5, 2.9),  // Corpus sterni
+    new THREE.Vector3(0, -26.2, 2.8),  // Xiphisternal junction
+    new THREE.Vector3(0, -28.0, 2.75)  // Xiphoid tip
+  ];
+  const sternum = buildLoftedBone(sternPts, (t) => {
+    let w = 1.15;
+    if (t < 0.25) w = 1.95 - 2.2 * Math.pow(t - 0.1, 2);   // Broad manubrium
+    else if (t < 0.8) w = 1.15 + 0.15 * Math.sin(((t - 0.25) / 0.55) * Math.PI); // Corpus
+    else w = 1.15 * Math.max(0.18, 1.0 - (t - 0.8) / 0.22); // Tapered xiphoid
+    return { rx: w, ry: 0.38 * (1 - 0.35 * t) };
+  }, 18, 10, true);
+  geos.push(sternum);
 
-  // Sternal body (Corpus sterni) with transverse ridges
-  const sternBody = new THREE.BoxGeometry(2.3, 9.4, 0.65);
-  sternBody.translate(0, -21.4, 2.9);
-  geos.push(sternBody);
-
-  // Xiphoid process
-  const xiphoid = new THREE.ConeGeometry(0.8, 1.8, 8);
-  xiphoid.rotateX(Math.PI);
-  xiphoid.translate(0, -27.0, 2.8);
-  geos.push(xiphoid);
-
-  // Clavicles (S-shaped Collarbones)
+  // 1.4 Clavicles (True S-shaped Collarbones with sternal & acromial epiphyseal flares)
   for (const side of [-1, 1]) {
-    const cp0 = new THREE.Vector3(side * 1.6, -14.0, 3.1);
-    const cp1 = new THREE.Vector3(side * 7.5, -13.6, 2.3);
-    const cp2 = new THREE.Vector3(side * 14.5, -13.2, 0.4);
-    const cCurve = new THREE.CatmullRomCurve3([cp0, cp1, cp2]);
-    const cTube = new THREE.TubeGeometry(cCurve, 14, 0.58, 8, false);
-    geos.push(cTube);
+    const cPts = [
+      new THREE.Vector3(side * 1.4, -13.9, 3.15),   // Sternal end
+      new THREE.Vector3(side * 5.2, -13.5, 3.55),   // Anterior convex medial curve
+      new THREE.Vector3(side * 10.2, -13.3, 1.85),  // Posterior concave lateral curve
+      new THREE.Vector3(side * 15.2, -13.1, 0.35)   // Acromial end
+    ];
+    const clav = buildLoftedBone(cPts, (t) => {
+      const flare = 1.0 + 0.55 * Math.exp(-Math.pow(t * 5, 2)) + 0.45 * Math.exp(-Math.pow((1 - t) * 5, 2));
+      return { rx: 0.48 * flare, ry: 0.36 * flare };
+    }, 16, 10, true);
+    geos.push(clav);
+  }
+
+  // 1.5 Scapulae (Bilateral Shoulder Blades: triangular body, scapular spine, acromion, glenoid)
+  for (const side of [-1, 1]) {
+    // Scapular flat blade (curved along posterior ribcage)
+    const bladePts = [
+      new THREE.Vector3(side * 9.5, -14.8, -5.3),   // Superior-medial angle
+      new THREE.Vector3(side * 11.0, -18.5, -5.0),  // Mid-blade
+      new THREE.Vector3(side * 9.8, -23.4, -4.4)    // Inferior angle
+    ];
+    const blade = buildLoftedBone(bladePts, (t) => {
+      const w = 2.6 * Math.sin(t * Math.PI * 0.78 + 0.32);
+      return { rx: Math.max(0.4, w), ry: 0.22 };
+    }, 10, 10, true);
+    geos.push(blade);
+
+    // Spine of Scapula & Acromion process arching over shoulder joint
+    const spinePts = [
+      new THREE.Vector3(side * 8.4, -16.4, -5.6),
+      new THREE.Vector3(side * 12.8, -15.2, -4.2),
+      new THREE.Vector3(side * 15.6, -13.4, -1.2),
+      new THREE.Vector3(side * 15.8, -13.1, 0.3)    // Meets acromial end of clavicle
+    ];
+    const scSpine = buildLoftedBone(spinePts, (t) => ({
+      rx: 0.38 + 0.25 * t,
+      ry: 0.55 * (1 - 0.3 * t)
+    }), 12, 8, true);
+    geos.push(scSpine);
   }
 
   return mergeGeos(geos);
@@ -268,133 +412,248 @@ export function buildRealisticLungsGeometry() {
   return mergeGeos(geos);
 }
 
-// ------------------------------ 5. Full Skeleton (Limbs & Pelvis) ------------------------------
+// ------------------------------ 5. Full Skeleton (Limbs & Pelvis - High-Fidelity Anatomical Bones) ------------------------------
 export function buildSkeletonParts() {
-  const geos = [];  // axial: lumbar spine, sacrum, pelvis
+  const geos = [];  // axial: lumbar spine, sacrum, coccyx, pelvic girdle
   const parts = {};
   const put = (name, side, g) => { const k = name + (side > 0 ? "L" : "R"); (parts[k] || (parts[k] = [])).push(g); };
 
-  // Lumbar Spine (L1-L5) with massive kidney-shaped bodies and broad spinous processes
+  // 5.1 Lumbar Spine (L1-L5) with physiological lumbar lordosis, massive kidney-shaped bodies & hatchet spinous processes
   for (let i = 0; i < 5; i++) {
-    const y = -30.0 - i * 1.8;
-    const z = -4.8 + i * 0.25;
-    const r = 1.85 + i * 0.12;
-    const lVert = new THREE.CylinderGeometry(r * 0.95, r, 1.35, 16);
-    lVert.rotateX(0.06); lVert.translate(0, y, z);
-    geos.push(lVert);
-    const spin = new THREE.BoxGeometry(0.5, 0.7, 1.8);
-    spin.translate(0, y + 0.1, z - 1.3);
-    geos.push(spin);
+    const y = -30.2 - i * 1.85;
+    const lordosis = Math.sin((i / 4) * Math.PI) * 1.1;
+    const z = -4.6 + lordosis;
+    const r = 1.75 + i * 0.14;
+    addVertebra(geos, y, z, r, 1.38, 2.05, 0.25, 1.55);
   }
 
-  // Pelvic Girdle & Sacrum
-  const sacrum = new THREE.CylinderGeometry(1.9, 0.7, 5.2, 10);
-  sacrum.rotateX(0.22); sacrum.translate(0, -42.0, -4.2);
+  // 5.2 Sacrum (triangular fused sacral segments S1-S5) & Coccyx
+  const sacrumPts = [
+    new THREE.Vector3(0, -39.2, -4.1),  // Sacral promontory
+    new THREE.Vector3(0, -41.5, -5.0),  // Posterior sacral curve
+    new THREE.Vector3(0, -44.2, -4.8),
+    new THREE.Vector3(0, -46.2, -3.7)   // Apex / Coccyx tip
+  ];
+  const sacrum = buildLoftedBone(sacrumPts, (t) => {
+    const w = 3.2 * (1 - 0.82 * t);
+    const d = 1.05 * (1 - 0.72 * t);
+    const segBump = 1.0 + 0.08 * Math.sin(t * Math.PI * 10);
+    return { rx: Math.max(0.25, w * segBump), ry: Math.max(0.2, d * segBump) };
+  }, 16, 12, true);
   geos.push(sacrum);
 
+  // 5.3 Pelvic Girdle (Os Coxae: Iliac Wing/Crest, Acetabulum, Ischial Tuberosity & Pubic Symphysis)
   for (const side of [-1, 1]) {
-    const ilium = new THREE.SphereGeometry(4.8, 14, 12);
-    ilium.scale(0.35, 1.0, 0.85);
-    ilium.rotateZ(side * 0.32); ilium.rotateY(side * 0.25);
-    ilium.translate(side * 8.5, -42.5, -1.8);
+    // Iliac Wing (Curved fan-shaped plate swept from sacroiliac joint to ASIS)
+    const iliumPts = [
+      new THREE.Vector3(side * 2.8, -40.5, -4.4),  // Posterior Superior Iliac Spine (PSIS)
+      new THREE.Vector3(side * 7.2, -38.8, -2.5),  // Iliac Crest arch
+      new THREE.Vector3(side * 10.2, -41.0, 0.2),  // Lateral Iliac Crest
+      new THREE.Vector3(side * 8.6, -45.5, -0.3)   // Acetabular roof
+    ];
+    const ilium = buildLoftedBone(iliumPts, (t) => {
+      const flare = 1.6 + 1.45 * Math.sin(t * Math.PI);
+      return { rx: 0.48, ry: flare };
+    }, 14, 12, true);
     geos.push(ilium);
 
-    const pubCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 7.5, -45.0, -1.2),
-      new THREE.Vector3(side * 4.5, -48.5, 0.5),
-      new THREE.Vector3(side * 1.2, -49.5, 1.8),
-      new THREE.Vector3(0, -49.8, 2.0)
-    ]);
-    const pubTube = new THREE.TubeGeometry(pubCurve, 12, 0.65, 8, false);
-    geos.push(pubTube);
+    // Acetabulum (Hip socket cup rim)
+    const acetabulum = new THREE.TorusGeometry(1.75, 0.48, 8, 16);
+    acetabulum.rotateY(side * 1.15);
+    acetabulum.translate(side * 8.2, -46.5, -0.4);
+    geos.push(acetabulum);
+
+    // Superior Pubic Ramus -> Pubic Symphysis
+    const pubSup = buildLoftedBone([
+      new THREE.Vector3(side * 8.0, -46.6, -0.2),
+      new THREE.Vector3(side * 4.5, -48.6, 1.4),
+      new THREE.Vector3(side * 0.4, -49.5, 2.2)
+    ], (t) => ({ rx: 0.55 - 0.1 * t, ry: 0.72 }), 10, 8, true);
+    geos.push(pubSup);
+
+    // Ischial Tuberosity & Inferior Pubic Ramus (forming Obturator Foramen loop)
+    const ischium = buildLoftedBone([
+      new THREE.Vector3(side * 8.0, -47.2, -0.8),
+      new THREE.Vector3(side * 6.8, -50.8, -1.6),  // Ischial tuberosity
+      new THREE.Vector3(side * 3.2, -51.2, 0.6),
+      new THREE.Vector3(side * 0.4, -49.8, 2.1)    // Meets pubic symphysis
+    ], (t) => {
+      const tub = 1.0 + 0.55 * Math.exp(-Math.pow((t - 0.35) * 5, 2));
+      return { rx: 0.58 * tub, ry: 0.65 * tub };
+    }, 12, 8, true);
+    geos.push(ischium);
   }
 
-  // Upper Limbs (Shoulders, Humerus, Elbows, Forearm)
+  // 5.4 Upper Limbs (Humerus, Radius, Ulna with true epiphyseal flares, condyles & olecranon)
   for (const side of [-1, 1]) {
-    const shBall = new THREE.SphereGeometry(1.4, 12, 10);
-    shBall.translate(side * 15.8, -14.6, 0.4);
-    put("upperArm", side, shBall);
+    // Humeral Head (Hemispherical articular surface angled medially into glenoid)
+    const humHead = new THREE.SphereGeometry(1.55, 14, 12);
+    humHead.scale(1.05, 1.0, 0.95);
+    humHead.translate(side * 15.3, -14.5, 0.4);
+    put("upperArm", side, humHead);
 
-    const humCurve = new THREE.CatmullRomCurve3([
+    // Greater Tubercle
+    const gTub = new THREE.SphereGeometry(0.95, 10, 8);
+    gTub.translate(side * 16.5, -14.7, 0.5);
+    put("upperArm", side, gTub);
+
+    // Humerus Shaft & Distal Epicondyles / Trochlea
+    const humPts = [
       new THREE.Vector3(side * 15.8, -14.6, 0.4),
-      new THREE.Vector3(side * 16.8, -21.0, 0.2),
+      new THREE.Vector3(side * 16.5, -19.0, 0.35),
+      new THREE.Vector3(side * 17.0, -24.0, -0.1),
       new THREE.Vector3(side * 17.5, -28.5, -0.6)
-    ]);
-    const humTube = new THREE.TubeGeometry(humCurve, 14, 0.88, 10, false);
-    put("upperArm", side, humTube);
+    ];
+    const humerus = buildLoftedBone(humPts, (t, th) => {
+      const proxFlare = 1.0 + 0.65 * Math.exp(-Math.pow(t * 6.5, 2));
+      const deltoidTub = 1.0 + 0.22 * Math.exp(-Math.pow((t - 0.38) * 7, 2));
+      const distFlare = 1.0 + 1.05 * Math.exp(-Math.pow((1 - t) * 7.5, 2));
+      const bilobed = 1.0 + 0.22 * Math.exp(-Math.pow((1 - t) * 8, 2)) * Math.cos(2 * th);
+      const baseR = 0.78 * proxFlare * deltoidTub;
+      return {
+        rx: baseR * distFlare * bilobed,
+        ry: baseR * (1.0 - 0.28 * Math.exp(-Math.pow((1 - t) * 6, 2)))
+      };
+    }, 20, 14, true);
+    put("upperArm", side, humerus);
 
-    const elbow = new THREE.SphereGeometry(1.2, 10, 8);
-    elbow.translate(side * 17.5, -28.5, -0.6);
-    put("forearm", side, elbow);
-
-    const radCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 17.8, -29.2, -0.4),
-      new THREE.Vector3(side * 18.6, -35.5, 0.0),
-      new THREE.Vector3(side * 19.2, -42.0, 0.5)
-    ]);
-    const radTube = new THREE.TubeGeometry(radCurve, 12, 0.48, 8, false);
-    put("forearm", side, radTube);
-
-    const ulnaCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 17.2, -29.2, -0.8),
+    // Ulna (Proximal Olecranon hook -> triangular shaft -> narrow Distal Styloid)
+    const ulnaPts = [
+      new THREE.Vector3(side * 17.1, -27.8, -1.1),  // Olecranon process
+      new THREE.Vector3(side * 17.2, -29.2, -0.7),
       new THREE.Vector3(side * 17.8, -35.5, -0.4),
-      new THREE.Vector3(side * 18.4, -42.0, 0.1)
-    ]);
-    const ulnaTube = new THREE.TubeGeometry(ulnaCurve, 12, 0.44, 8, false);
-    put("forearm", side, ulnaTube);
+      new THREE.Vector3(side * 18.4, -42.0, 0.1)    // Distal ulnar head
+    ];
+    const ulna = buildLoftedBone(ulnaPts, (t, th) => {
+      const olecranon = 1.0 + 1.15 * Math.exp(-Math.pow(t * 7, 2));
+      const taper = 1.0 - 0.38 * t;
+      const triShaft = 1.0 + 0.12 * Math.cos(3 * th);
+      return { rx: 0.45 * olecranon * taper * triShaft, ry: 0.48 * olecranon * taper };
+    }, 16, 10, true);
+    put("forearm", side, ulna);
+
+    // Radius (Disc Radial Head -> bowed shaft -> broad Distal Radius)
+    const radPts = [
+      new THREE.Vector3(side * 17.9, -29.0, -0.35), // Radial head
+      new THREE.Vector3(side * 18.7, -33.5, 0.05),
+      new THREE.Vector3(side * 18.9, -38.0, 0.25),
+      new THREE.Vector3(side * 19.3, -42.0, 0.5)    // Distal wrist flare
+    ];
+    const radius = buildLoftedBone(radPts, (t) => {
+      const head = 1.0 + 0.55 * Math.exp(-Math.pow(t * 8, 2));
+      const wrist = 1.0 + 0.95 * Math.exp(-Math.pow((1 - t) * 6.5, 2));
+      return { rx: 0.44 * head * wrist, ry: 0.42 * head * (1 + 0.3 * wrist) };
+    }, 16, 10, true);
+    put("forearm", side, radius);
   }
 
-  // Lower Limbs (Femur, Patella, Tibia, Fibula, Feet)
+  // 5.5 Lower Limbs (Femur with Head/Neck/Trochanters/Condyles, Patella, Tibia with Shin Crest, Fibula, 5-Toed Foot)
   for (const side of [-1, 1]) {
-    const femHead = new THREE.SphereGeometry(1.6, 12, 10);
+    // Femoral Head (inside Acetabulum)
+    const femHead = new THREE.SphereGeometry(1.65, 14, 12);
     femHead.translate(side * 8.2, -46.5, -0.4);
     put("thigh", side, femHead);
 
-    const femCurve = new THREE.CatmullRomCurve3([
+    // Femoral Neck (angled ~126° from shaft to head)
+    const neckPts = [
       new THREE.Vector3(side * 8.2, -46.5, -0.4),
-      new THREE.Vector3(side * 9.8, -50.0, 0.0),
-      new THREE.Vector3(side * 8.6, -58.0, 0.3),
-      new THREE.Vector3(side * 6.8, -67.0, 0.2)
-    ]);
-    const femTube = new THREE.TubeGeometry(femCurve, 18, 1.18, 10, false);
-    put("thigh", side, femTube);
+      new THREE.Vector3(side * 9.5, -47.6, -0.25),
+      new THREE.Vector3(side * 10.7, -48.6, -0.1)
+    ];
+    const femNeck = buildLoftedBone(neckPts, (t) => 0.92 - 0.1 * Math.sin(t * Math.PI), 8, 10, true);
+    put("thigh", side, femNeck);
 
-    const patella = new THREE.CylinderGeometry(0.9, 0.7, 0.5, 10);
-    patella.rotateX(Math.PI / 2); patella.translate(side * 6.8, -67.0, 1.8);
+    // Greater Trochanter
+    const gTroch = new THREE.SphereGeometry(1.35, 10, 8);
+    gTroch.scale(0.85, 1.25, 0.95);
+    gTroch.translate(side * 11.2, -48.4, -0.2);
+    put("thigh", side, gTroch);
+
+    // Lesser Trochanter
+    const lTroch = new THREE.SphereGeometry(0.7, 8, 8);
+    lTroch.translate(side * 9.6, -50.2, -0.8);
+    put("thigh", side, lTroch);
+
+    // Femur Shaft & Distal Medial/Lateral Condyles
+    const femPts = [
+      new THREE.Vector3(side * 10.7, -48.6, -0.1),
+      new THREE.Vector3(side * 9.6, -53.5, 0.45),   // Anterior bowing
+      new THREE.Vector3(side * 8.2, -60.5, 0.45),
+      new THREE.Vector3(side * 6.8, -67.0, 0.2)     // Knee joint condyles
+    ];
+    const femur = buildLoftedBone(femPts, (t, th) => {
+      const prox = 1.0 + 0.45 * Math.exp(-Math.pow(t * 6, 2));
+      const dist = 1.0 + 1.05 * Math.exp(-Math.pow((1 - t) * 7, 2));
+      const condyles = 1.0 + 0.24 * Math.exp(-Math.pow((1 - t) * 8, 2)) * Math.cos(2 * th);
+      const linea = 1.0 + 0.1 * Math.sin(3 * th);
+      return {
+        rx: 1.02 * prox * dist * condyles * linea,
+        ry: 0.98 * prox * (1 + 0.55 * Math.exp(-Math.pow((1 - t) * 7, 2)))
+      };
+    }, 22, 14, true);
+    put("thigh", side, femur);
+
+    // Patella (Sesamoid kneecap)
+    const patella = new THREE.SphereGeometry(1.15, 12, 10);
+    patella.scale(0.95, 1.05, 0.48);
+    patella.translate(side * 6.8, -67.1, 1.75);
     put("shin", side, patella);
 
-    const knee = new THREE.SphereGeometry(1.6, 12, 10);
-    knee.scale(1.1, 0.8, 1.0); knee.translate(side * 6.8, -67.5, 0.2);
-    put("shin", side, knee);
-
-    const tibCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 6.8, -68.5, 0.2),
-      new THREE.Vector3(side * 6.5, -78.0, 0.0),
+    // Tibia (Broad Tibial Plateau -> Sharp Triangular Shin Crest -> Medial Malleolus)
+    const tibPts = [
+      new THREE.Vector3(side * 6.8, -68.0, 0.2),
+      new THREE.Vector3(side * 6.65, -74.0, 0.15),
+      new THREE.Vector3(side * 6.45, -81.0, 0.0),
       new THREE.Vector3(side * 6.2, -88.0, -0.2)
-    ]);
-    const tibTube = new THREE.TubeGeometry(tibCurve, 16, 0.98, 10, false);
-    put("shin", side, tibTube);
+    ];
+    const tibia = buildLoftedBone(tibPts, (t, th) => {
+      const plateau = 1.0 + 1.05 * Math.exp(-Math.pow(t * 7.5, 2));
+      const mall = 1.0 + 0.65 * Math.exp(-Math.pow((1 - t) * 7.5, 2));
+      const crest = 1.0 + 0.18 * Math.cos(3 * th); // Triangular tibial crest
+      return {
+        rx: 0.85 * plateau * mall * crest,
+        ry: 0.82 * (1 + 0.6 * Math.exp(-Math.pow(t * 7, 2))) * mall
+      };
+    }, 20, 12, true);
+    put("shin", side, tibia);
 
-    const fibCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 8.2, -69.5, -0.4),
-      new THREE.Vector3(side * 8.0, -78.0, -0.5),
-      new THREE.Vector3(side * 7.5, -87.5, -0.3)
-    ]);
-    const fibTube = new THREE.TubeGeometry(fibCurve, 14, 0.40, 8, false);
-    put("shin", side, fibTube);
+    // Fibula (Bulbous Head -> Slender Shaft -> Prominent Lateral Malleolus)
+    const fibPts = [
+      new THREE.Vector3(side * 8.3, -69.2, -0.45),
+      new THREE.Vector3(side * 8.1, -77.5, -0.55),
+      new THREE.Vector3(side * 7.6, -88.2, -0.35)
+    ];
+    const fibula = buildLoftedBone(fibPts, (t) => {
+      const head = 1.0 + 0.75 * Math.exp(-Math.pow(t * 8, 2));
+      const latMall = 1.0 + 0.85 * Math.exp(-Math.pow((1 - t) * 8, 2));
+      return { rx: 0.34 * head * latMall, ry: 0.38 * head * latMall };
+    }, 16, 8, true);
+    put("shin", side, fibula);
 
-    const ankle = new THREE.SphereGeometry(1.2, 10, 8);
-    ankle.translate(side * 6.2, -88.0, -0.2);
-    put("shin", side, ankle);
+    // Foot Skeleton: Calcaneus (Heel), Talus, Tarsal Arch & 5 Metatarsals/Toes
+    const calcaneus = buildLoftedBone([
+      new THREE.Vector3(side * 6.2, -90.2, -1.8),   // Posterior heel tuberosity
+      new THREE.Vector3(side * 6.2, -89.4, 0.2),    // Talocalcaneal body
+      new THREE.Vector3(side * 6.1, -90.2, 2.2)     // Midfoot tarsals
+    ], (t) => ({ rx: 1.05 - 0.15 * t, ry: 1.15 - 0.2 * t }), 10, 10, true);
+    put("shin", side, calcaneus);
 
-    const footCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side * 6.2, -88.0, -0.2),
-      new THREE.Vector3(side * 6.2, -89.8, 1.8),
-      new THREE.Vector3(side * 6.0, -90.5, 5.2),
-      new THREE.Vector3(side * 5.8, -91.0, 8.5)
-    ]);
-    const footTube = new THREE.TubeGeometry(footCurve, 12, 0.85, 8, false);
-    put("shin", side, footTube);
+    // 5 Metatarsals & Phalanges (fanning from medial hallux to lateral 5th toe)
+    for (let toe = 0; toe < 5; toe++) {
+      const medOffset = (toe - 2) * 0.55 * side;
+      const toeLen = toe === 0 ? 6.2 : 6.4 - toe * 0.45;
+      const toePts = [
+        new THREE.Vector3(side * 6.1 + medOffset * 0.45, -90.1, 2.0),
+        new THREE.Vector3(side * 6.0 + medOffset * 0.85, -90.8, 2.0 + toeLen * 0.55),
+        new THREE.Vector3(side * 5.9 + medOffset, -91.1, 2.0 + toeLen)
+      ];
+      const rRay = toe === 0 ? 0.38 : 0.24;
+      const ray = buildLoftedBone(toePts, (t) => {
+        const joint = 1.0 + 0.3 * Math.sin(t * Math.PI * 2);
+        return rRay * joint * (1 - 0.25 * t);
+      }, 8, 6, true);
+      put("shin", side, ray);
+    }
   }
 
   const out = { axial: mergeGeos(geos), segments: {} };
