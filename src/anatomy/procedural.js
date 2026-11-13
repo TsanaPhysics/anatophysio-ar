@@ -315,166 +315,159 @@ export function buildCostalCartilageGeometry() {
  * (myocardium, aorta, blue systemic/pulmonary vessels, pulmonary veins, coronary tree)
  * so the 3D WebGL heart matches medical animations (Flow) rather than simple primitives.
  */
+function sculptMyoPoint(nx, ny, nz, inflate = 1.0) {
+  const yn = (ny + 1.0) * 0.5;
+  const taper = 0.28 + 0.72 * Math.pow(yn, 0.55);
+  let x = nx * 2.55 * taper * inflate;
+  let z = nz * 2.05 * taper * inflate;
+  const y = ny * 3.15;
+
+  const apexFactor = Math.pow(1.0 - yn, 1.35);
+  x += 1.65 * apexFactor;
+  z += 0.65 * apexFactor;
+
+  const sulcusDist = Math.abs(x - (0.35 + 0.9 * apexFactor));
+  if (sulcusDist < 0.75 && y < 1.2) {
+    const groove = Math.cos((sulcusDist / 0.75) * Math.PI * 0.5);
+    z *= (1.0 - 0.14 * groove);
+  }
+  const avDist = Math.abs(y - 1.15);
+  if (avDist < 0.65) {
+    const avGroove = Math.cos((avDist / 0.65) * Math.PI * 0.5);
+    x *= (1.0 - 0.08 * avGroove);
+    z *= (1.0 - 0.10 * avGroove);
+  }
+  if (y < 1.1 && x < 0.4 && z > 0) z += 0.25 * Math.sin(yn * Math.PI);
+  if (y < 1.1 && x > 0.5) x += 0.22 * Math.sin(yn * Math.PI);
+
+  return new THREE.Vector3(x + 0.7, y - 20.3, z + 0.25);
+}
+
+function surfacePointFromAngles(theta, ny, inflate = 1.03) {
+  const rHoriz = Math.sqrt(Math.max(0.001, 1.0 - ny * ny));
+  return sculptMyoPoint(Math.sin(theta) * rHoriz, ny, Math.cos(theta) * rHoriz, inflate);
+}
+
 export function buildRealisticHeartParts() {
   // 3.1 Sculpted Ventricular & Atrial Myocardium (deformed high-res organic mesh)
-  const myoGeo = new THREE.SphereGeometry(1.0, 40, 32);
+  const myoGeo = new THREE.SphereGeometry(1.0, 44, 36);
   const pos = myoGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    let x = pos.getX(i);
-    let y = pos.getY(i);
-    let z = pos.getZ(i);
-
-    // Base ventricular teardrop/ovoid profile: wider at base (y > 0), tapered to apex (y < 0)
-    const yn = (y + 1.0) * 0.5; // 0 at apex (-1), 1 at base (+1)
-    const taper = 0.28 + 0.72 * Math.pow(yn, 0.55);
-    x *= 2.55 * taper;
-    z *= 2.05 * taper;
-    y *= 3.15;
-
-    // Tilt apex toward subject's LEFT (+x), inferior (-y), and anterior (+z)
-    const apexFactor = Math.pow(1.0 - yn, 1.35);
-    x += 1.65 * apexFactor;
-    z += 0.65 * apexFactor;
-
-    // Anterior & Posterior Interventricular Sulcus (groove separating RV and LV)
-    const sulcusDist = Math.abs(x - (0.35 + 0.9 * apexFactor));
-    if (sulcusDist < 0.75 && y < 1.2) {
-      const groove = Math.cos((sulcusDist / 0.75) * Math.PI * 0.5);
-      z *= (1.0 - 0.14 * groove);
-    }
-
-    // Atrioventricular (Coronary) Sulcus indentation around y ~ 1.15
-    const avDist = Math.abs(y - 1.15);
-    if (avDist < 0.65) {
-      const avGroove = Math.cos((avDist / 0.65) * Math.PI * 0.5);
-      x *= (1.0 - 0.08 * avGroove);
-      z *= (1.0 - 0.10 * avGroove);
-    }
-
-    // Slight bulges for Right Ventricle (anterior-right) & Left Ventricle (posterior-left)
-    if (y < 1.1 && x < 0.4 && z > 0) z += 0.25 * Math.sin(yn * Math.PI);
-    if (y < 1.1 && x > 0.5) x += 0.22 * Math.sin(yn * Math.PI);
-
-    pos.setXYZ(i, x + 0.7, y - 20.3, z + 0.25);
+    const p = sculptMyoPoint(pos.getX(i), pos.getY(i), pos.getZ(i), 1.0);
+    pos.setXYZ(i, p.x, p.y, p.z);
   }
   myoGeo.computeVertexNormals();
 
   // Smooth sculpted Right & Left Atria + Auricles at base
   const myoGeos = [myoGeo];
-  const ra = new THREE.SphereGeometry(1.55, 22, 16);
-  ra.scale(0.95, 1.05, 0.88); ra.translate(-1.05, -18.1, -0.15);
+  const ra = new THREE.SphereGeometry(1.58, 24, 18);
+  ra.scale(0.95, 1.10, 0.88); ra.translate(-1.15, -18.1, -0.22);
   myoGeos.push(ra);
 
   const rAur = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-1.1, -17.6, 0.4),
-    new THREE.Vector3(-0.6, -17.3, 1.1),
-    new THREE.Vector3( 0.0, -17.5, 1.3)
-  ]), 10, 0.48, 8, false);
+    new THREE.Vector3(-1.1, -17.6, 0.3),
+    new THREE.Vector3(-0.6, -17.3, 1.0),
+    new THREE.Vector3( 0.0, -17.5, 1.25)
+  ]), 10, 0.46, 8, false);
   myoGeos.push(rAur);
 
-  const la = new THREE.SphereGeometry(1.50, 22, 16);
-  la.scale(1.02, 0.96, 0.85); la.translate(2.15, -17.9, -0.55);
+  const la = new THREE.SphereGeometry(1.48, 24, 18);
+  la.scale(1.0, 0.96, 0.84); la.translate(2.05, -17.9, -0.55);
   myoGeos.push(la);
 
   const lAur = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-    new THREE.Vector3(2.1, -17.5, -0.1),
-    new THREE.Vector3(1.7, -17.2,  0.8),
-    new THREE.Vector3(1.3, -17.5,  1.2)
-  ]), 10, 0.44, 8, false);
+    new THREE.Vector3(2.0, -17.5, -0.1),
+    new THREE.Vector3(1.65, -17.2, 0.75),
+    new THREE.Vector3(1.25, -17.5, 1.15)
+  ]), 10, 0.42, 8, false);
   myoGeos.push(lAur);
 
-  // 3.2 Aorta: Ascending Aorta, Aortic Arch, Descending Aorta & 3 Supra-aortic Branches (Bright Arterial Red)
+  // 3.2 Aorta: Ascending Aorta, Aortic Arch, Descending Aorta & Curved Supra-aortic Branches
   const aortaGeos = [];
   const aortaCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0.85, -18.4, 0.35),
-    new THREE.Vector3(0.55, -15.3, 0.55),
-    new THREE.Vector3(1.35, -14.1, -0.05),
-    new THREE.Vector3(2.55, -14.7, -0.95),
-    new THREE.Vector3(2.85, -19.8, -1.75)
+    new THREE.Vector3(0.85, -18.5, 0.35),
+    new THREE.Vector3(0.55, -15.4, 0.55),
+    new THREE.Vector3(1.35, -14.2, -0.05),
+    new THREE.Vector3(2.45, -14.8, -0.95),
+    new THREE.Vector3(2.75, -19.8, -1.75)
   ]);
-  aortaGeos.push(new THREE.TubeGeometry(aortaCurve, 28, 0.76, 14, false));
-  // Aortic root bulb (Sinus of Valsalva)
-  const aorticRoot = new THREE.SphereGeometry(0.92, 16, 12);
-  aorticRoot.scale(1.0, 0.85, 1.0); aorticRoot.translate(0.8, -18.0, 0.4);
+  aortaGeos.push(new THREE.TubeGeometry(aortaCurve, 28, 0.72, 14, false));
+  const aorticRoot = new THREE.SphereGeometry(0.88, 16, 12);
+  aorticRoot.scale(1.0, 0.85, 1.0); aorticRoot.translate(0.82, -18.1, 0.38);
   aortaGeos.push(aorticRoot);
-  // 3 Supra-aortic branches
   aortaGeos.push(
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0.85, -14.5, 0.35), new THREE.Vector3(0.45, -12.4, 0.75)]), 8, 0.32, 8, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(1.55, -14.2, 0.05), new THREE.Vector3(1.55, -12.3, 0.25)]), 8, 0.27, 8, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(2.15, -14.3, -0.35), new THREE.Vector3(2.55, -12.4, -0.25)]), 8, 0.27, 8, false)
+    buildLoftedBone([new THREE.Vector3(0.82, -14.6, 0.35), new THREE.Vector3(0.62, -13.4, 0.52), new THREE.Vector3(0.45, -12.4, 0.65)], t => 0.30 * (1 - 0.35 * t), 8, 8),
+    buildLoftedBone([new THREE.Vector3(1.48, -14.2, 0.05), new THREE.Vector3(1.50, -13.2, 0.15), new THREE.Vector3(1.52, -12.3, 0.22)], t => 0.25 * (1 - 0.35 * t), 8, 8),
+    buildLoftedBone([new THREE.Vector3(2.05, -14.3, -0.35), new THREE.Vector3(2.28, -13.3, -0.32), new THREE.Vector3(2.45, -12.4, -0.25)], t => 0.25 * (1 - 0.35 * t), 8, 8)
   );
 
-  // 3.3 Blue Vessels: Superior & Inferior Vena Cava + Pulmonary Trunk & L/R Pulmonary Arteries
+  // 3.3 Blue Vessels: Continuous SVC -> RA -> IVC + Pulmonary Trunk & L/R Pulmonary Arteries
   const blueGeos = [];
-  const svcCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-1.35, -13.4, -0.55),
-    new THREE.Vector3(-1.35, -15.8, -0.45),
-    new THREE.Vector3(-1.25, -17.6, -0.25)
-  ]);
-  blueGeos.push(new THREE.TubeGeometry(svcCurve, 14, 0.58, 12, false));
-  // Left & Right Brachiocephalic Veins feeding SVC
+  // Continuous SVC + IVC curving smoothly behind/into Right Atrium (no gap!)
+  blueGeos.push(buildLoftedBone([
+    new THREE.Vector3(-1.32, -13.4, -0.50),
+    new THREE.Vector3(-1.28, -15.8, -0.38),
+    new THREE.Vector3(-1.22, -18.1, -0.32),
+    new THREE.Vector3(-1.28, -21.0, -0.62),
+    new THREE.Vector3(-1.32, -23.8, -0.78)
+  ], t => 0.52 + 0.10 * Math.sin(t * Math.PI), 18, 12));
   blueGeos.push(
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-1.35, -13.5, -0.55), new THREE.Vector3(-2.4, -12.3, -0.3)]), 8, 0.36, 8, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-1.35, -13.5, -0.55), new THREE.Vector3(0.2, -12.5, 0.1)]), 8, 0.34, 8, false)
+    buildLoftedBone([new THREE.Vector3(-1.32, -13.5, -0.50), new THREE.Vector3(-2.1, -12.4, -0.3)], t => 0.34 * (1 - 0.3 * t), 8, 8),
+    buildLoftedBone([new THREE.Vector3(-1.32, -13.5, -0.50), new THREE.Vector3(-0.1, -12.6, 0.05)], t => 0.32 * (1 - 0.3 * t), 8, 8)
   );
-  // Inferior Vena Cava (IVC) entering bottom of Right Atrium
-  blueGeos.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-1.25, -18.8, -0.4),
-    new THREE.Vector3(-1.35, -21.8, -0.75),
-    new THREE.Vector3(-1.35, -24.5, -0.85)
-  ]), 10, 0.62, 10, false));
-  // Pulmonary Trunk (arises anteriorly from RV, bifurcates under Aortic Arch)
-  blueGeos.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0.35, -19.0, 1.35),
-    new THREE.Vector3(0.95, -17.1, 1.05),
-    new THREE.Vector3(1.55, -16.1, 0.45)
-  ]), 16, 0.66, 12, false));
-  // Left & Right Pulmonary Arteries
+  // Pulmonary Trunk emerging smoothly from RV infundibulum
+  blueGeos.push(buildLoftedBone([
+    new THREE.Vector3(0.28, -19.1, 1.32),
+    new THREE.Vector3(0.85, -17.3, 1.05),
+    new THREE.Vector3(1.45, -16.2, 0.45)
+  ], t => 0.64 * (1 - 0.12 * t), 14, 12));
   blueGeos.push(
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(1.55, -16.1, 0.45), new THREE.Vector3(3.4, -16.2, -0.35)]), 10, 0.44, 10, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(1.55, -16.1, 0.45), new THREE.Vector3(-0.2, -16.2, -0.35), new THREE.Vector3(-2.6, -16.5, -0.5)]), 12, 0.44, 10, false)
+    buildLoftedBone([new THREE.Vector3(1.45, -16.2, 0.45), new THREE.Vector3(2.45, -16.2, -0.15), new THREE.Vector3(3.3, -16.3, -0.45)], t => 0.42 * (1 - 0.3 * t), 10, 10),
+    buildLoftedBone([new THREE.Vector3(1.45, -16.2, 0.45), new THREE.Vector3(0.0, -16.2, -0.25), new THREE.Vector3(-2.4, -16.4, -0.55)], t => 0.42 * (1 - 0.3 * t), 10, 10)
   );
 
-  // 3.4 Pulmonary Veins (4 oxygenated vessels entering Left Atrium)
+  // 3.4 Pulmonary Veins (tucked neatly into posterior Left Atrium)
   const pvGeos = [
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(2.4, -17.5, -0.6), new THREE.Vector3(3.9, -17.1, -0.7)]), 8, 0.28, 8, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(2.4, -18.2, -0.7), new THREE.Vector3(3.9, -18.4, -0.8)]), 8, 0.28, 8, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(1.5, -17.6, -0.8), new THREE.Vector3(-0.8, -17.3, -1.0)]), 8, 0.26, 8, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(1.5, -18.3, -0.9), new THREE.Vector3(-0.8, -18.5, -1.0)]), 8, 0.26, 8, false)
+    buildLoftedBone([new THREE.Vector3(2.15, -17.5, -0.75), new THREE.Vector3(3.25, -17.2, -0.95)], t => 0.25 * (1 - 0.25 * t), 8, 8),
+    buildLoftedBone([new THREE.Vector3(2.15, -18.2, -0.82), new THREE.Vector3(3.25, -18.3, -1.02)], t => 0.25 * (1 - 0.25 * t), 8, 8),
+    buildLoftedBone([new THREE.Vector3(1.65, -17.6, -0.95), new THREE.Vector3(0.25, -17.4, -1.15)], t => 0.23 * (1 - 0.25 * t), 8, 8),
+    buildLoftedBone([new THREE.Vector3(1.65, -18.3, -1.00), new THREE.Vector3(0.25, -18.4, -1.20)], t => 0.23 * (1 - 0.25 * t), 8, 8)
   ];
 
-  // 3.5 Epicardial Coronary Artery Tree (LAD + Diagonal branches + LCx + RCA)
+  // 3.5 Epicardial Coronary Artery Tree projected skin-tight onto sculptMyoPoint surface
   const corGeos = [
-    // Left Anterior Descending (LAD) hugging anterior interventricular groove
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.95, -18.2, 1.55),
-      new THREE.Vector3(1.25, -19.8, 2.02),
-      new THREE.Vector3(1.65, -21.5, 1.92),
-      new THREE.Vector3(2.15, -22.9, 1.38)
-    ]), 18, 0.14, 7, false),
-    // Diagonal Branches (D1, D2)
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-      new THREE.Vector3(1.25, -19.8, 2.02),
-      new THREE.Vector3(2.25, -20.6, 1.78),
-      new THREE.Vector3(2.85, -21.5, 1.25)
-    ]), 10, 0.085, 6, false),
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-      new THREE.Vector3(1.55, -21.1, 1.95),
-      new THREE.Vector3(2.35, -21.9, 1.55)
-    ]), 8, 0.075, 6, false),
-    // Left Circumflex (LCx)
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-      new THREE.Vector3(1.1, -18.3, 1.45),
-      new THREE.Vector3(2.45, -18.9, 1.15),
-      new THREE.Vector3(3.15, -19.3, 0.15)
-    ]), 12, 0.11, 6, false),
-    // Right Coronary Artery (RCA) + Marginal branch
-    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.3, -18.3, 1.65),
-      new THREE.Vector3(-0.75, -19.2, 1.65),
-      new THREE.Vector3(-1.15, -20.5, 1.25),
-      new THREE.Vector3(-0.35, -22.1, 1.15)
-    ]), 14, 0.12, 7, false)
+    // LAD running right along the anterior interventricular groove
+    buildLoftedBone([
+      surfacePointFromAngles(0.05, 0.45, 1.03),
+      surfacePointFromAngles(0.08, 0.15, 1.03),
+      surfacePointFromAngles(0.10, -0.20, 1.03),
+      surfacePointFromAngles(0.12, -0.55, 1.03),
+      surfacePointFromAngles(0.14, -0.82, 1.03)
+    ], t => 0.11 * (1 - 0.68 * t), 16, 7),
+    // Diagonal Branch D1
+    buildLoftedBone([
+      surfacePointFromAngles(0.08, 0.15, 1.03),
+      surfacePointFromAngles(0.45, -0.05, 1.03),
+      surfacePointFromAngles(0.75, -0.32, 1.03)
+    ], t => 0.075 * (1 - 0.65 * t), 10, 6),
+    // Diagonal Branch D2
+    buildLoftedBone([
+      surfacePointFromAngles(0.10, -0.20, 1.03),
+      surfacePointFromAngles(0.42, -0.42, 1.03)
+    ], t => 0.065 * (1 - 0.65 * t), 8, 6),
+    // Left Circumflex (LCx) wrapping around left lateral AV groove
+    buildLoftedBone([
+      surfacePointFromAngles(0.15, 0.48, 1.03),
+      surfacePointFromAngles(0.75, 0.42, 1.03),
+      surfacePointFromAngles(1.35, 0.36, 1.03)
+    ], t => 0.095 * (1 - 0.55 * t), 10, 6),
+    // Right Coronary Artery (RCA) wrapping around right AV groove & marginal branch
+    buildLoftedBone([
+      surfacePointFromAngles(-0.25, 0.46, 1.03),
+      surfacePointFromAngles(-0.75, 0.35, 1.03),
+      surfacePointFromAngles(-0.95, 0.02, 1.03),
+      surfacePointFromAngles(-0.65, -0.38, 1.03)
+    ], t => 0.095 * (1 - 0.60 * t), 12, 7)
   ];
 
   return {

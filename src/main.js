@@ -169,7 +169,7 @@ const DEFAULTS = {
   skull: true, brain: false, digital_brain: true, deep_learning: true, muscles: false, vessels: true,
   eyes: true, eye_vessels: true, fundusHud: true, outline: true, hands: true,
   ribs: true, heart: true, lungs: true, cartilage: true, skeleton: true, region: "auto",
-  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true, alveolarHud: true, cardiacValvesHud: true, heartCutaway: true,
+  bpm: 75, resp: 15, heartAudio: true, twist: true, rppg: true, ecgHud: true, alveolarHud: true, cardiacValvesHud: true, heartCutaway: false,
   style: "xray", bright: 1, real: 0.12, feather: 0.2, reveal: "whole", cut: 0.5, showdata: false,
   fs: 1, fw: 1, fh: 1, fd: 1, fx: 0, fy: 0, fz: 0, labels: false,
   lang: "both", ergo: true, ergoAudio: true
@@ -361,7 +361,7 @@ function makeMat(xray, solid, mode) {
   return new THREE.ShaderMaterial({
     uniforms: { uColor: { value: new THREE.Color(xray) }, uSolidColor: { value: new THREE.Color(solid) },
                 uOpacity: { value: 1 }, uGain: { value: 1 }, uMode: { value: mode || 0 }, uOrtho: { value: 0 }, uFade: { value: 0 }, uFeather: { value: 0 }, uCutSoft: { value: 0 },
-                uSpec: { value: 0.45 }, uFibers: { value: 0.0 }, uAlphaMul: { value: 1.0 },
+                uSpec: { value: 0.45 }, uFibers: { value: 0.0 }, uAlphaMul: { value: 1.0 }, uCutaway: { value: 0.0 },
                 uClipOn: { value: 0 }, uClip: { value: new THREE.Vector4(1, 0, 0, 0) }, uToHead: { value: new THREE.Matrix4() } },
     vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, transparent: true,
     depthTest: false, depthWrite: false, blending: mode === 2 ? THREE.NormalBlending : THREE.AdditiveBlending
@@ -533,9 +533,20 @@ function buildScene() {
   const rbcGeo = new THREE.BufferGeometry();
   rbcGeo.setAttribute("position", new THREE.BufferAttribute(rbcPos, 3));
   rbcGeo.setAttribute("color", new THREE.BufferAttribute(rbcCol, 3));
+  const rbcCv = document.createElement("canvas");
+  rbcCv.width = 32; rbcCv.height = 32;
+  const rbcCtx = rbcCv.getContext("2d");
+  const rbcGrad = rbcCtx.createRadialGradient(16, 16, 2, 16, 16, 15);
+  rbcGrad.addColorStop(0, "rgba(255,255,255,1)");
+  rbcGrad.addColorStop(0.55, "rgba(255,255,255,0.85)");
+  rbcGrad.addColorStop(1, "rgba(255,255,255,0)");
+  rbcCtx.fillStyle = rbcGrad;
+  rbcCtx.fillRect(0, 0, 32, 32);
+  const rbcTex = new THREE.CanvasTexture(rbcCv);
+
   const rbcMat = new THREE.PointsMaterial({
-    size: 5.5, sizeAttenuation: false, vertexColors: true,
-    transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending
+    size: 8.5, sizeAttenuation: false, vertexColors: true, map: rbcTex,
+    transparent: true, alphaTest: 0.04, depthWrite: false, opacity: 0.95, blending: THREE.AdditiveBlending
   });
   bloodFlowPoints = new THREE.Points(rbcGeo, rbcMat);
   bloodFlowPoints.renderOrder = 7; bloodFlowPoints.frustumCulled = false;
@@ -621,11 +632,13 @@ function applyStyle() {
     const isSoftOrgan = info.layer === "heart" || info.layer === "lungs" || info.layer === "brain" || info.layer === "muscles";
     if (m.uniforms.uFibers) m.uniforms.uFibers.value = isSoftOrgan ? 0.85 : 0.15;
     if (m.uniforms.uSpec) m.uniforms.uSpec.value = isSoftOrgan ? 0.65 : 0.25;
-    const isCutawayShell = cutaway && (info.mesh === meshes.heart?.mesh || info.mesh === meshes.lungs?.mesh);
-    if (m.uniforms.uAlphaMul) m.uniforms.uAlphaMul.value = (solid && isCutawayShell) ? (info.mesh === meshes.lungs?.mesh ? 0.36 : 0.32) : 1.0;
+    const isLungCutaway = cutaway && info.mesh === meshes.lungs?.mesh;
+    const isHeartCutaway = cutaway && info.mesh === meshes.heart?.mesh;
+    if (m.uniforms.uAlphaMul) m.uniforms.uAlphaMul.value = (solid && isLungCutaway) ? 0.36 : 1.0;
+    if (m.uniforms.uCutaway) m.uniforms.uCutaway.value = (solid && isHeartCutaway) ? 1.0 : 0.0;
     m.blending = solid ? THREE.NormalBlending : THREE.AdditiveBlending;
     m.depthTest = solid;
-    m.depthWrite = solid && !isCutawayShell;
+    m.depthWrite = solid && !isLungCutaway;
     m.needsUpdate = true;
   });
 }
